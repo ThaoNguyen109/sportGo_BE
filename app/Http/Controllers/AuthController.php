@@ -1,18 +1,27 @@
 <?php
+<<<<<<< HEAD
 
+=======
+>>>>>>> origin/main
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Services\AuthService;
 
+<<<<<<< HEAD
 class AuthController extends Controller
 {
+=======
+class AuthController extends Controller {
+
+>>>>>>> origin/main
     protected $authService;
 
     public function __construct(AuthService $authService) {
         $this->authService = $authService;
     }
 
+<<<<<<< HEAD
     public function register(Request $request) {
         $request->validate([
             'name' => 'required|string|max:255',
@@ -35,6 +44,10 @@ class AuthController extends Controller
     }
 
     public function login(Request $request) {
+=======
+    public function login(Request $request) {
+
+>>>>>>> origin/main
         $request->validate([
             'email' => 'required|email',
             'password' => 'required'
@@ -53,10 +66,13 @@ class AuthController extends Controller
 
         return response()->json($result);
     }
+<<<<<<< HEAD
     public function me()
 {
     return response()->json([
         'user' => auth('api')->user()
     ]);
 }
+=======
+>>>>>>> origin/main
 }

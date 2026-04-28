@@ -1,4 +1,5 @@
 <?php
+<<<<<<< HEAD
 
 namespace App\Services;
 
@@ -28,17 +29,34 @@ class AuthService
 
     public function login($email, $password)
     {
+=======
+namespace App\Services;
+
+class AuthService {
+
+    public function login($email, $password) {
+
+>>>>>>> origin/main
         $credentials = [
             'email' => $email,
             'password' => $password
         ];
 
+<<<<<<< HEAD
         if (!$token = auth('api')->attempt($credentials)) {
+=======
+        // 🔥 JWT login
+        if (!$token = auth()->attempt($credentials)) {
+>>>>>>> origin/main
             return null;
         }
 
         return [
+<<<<<<< HEAD
             'user' => auth('api')->user(),
+=======
+            'user' => auth()->user(),
+>>>>>>> origin/main
             'token' => $token
         ];
     }
