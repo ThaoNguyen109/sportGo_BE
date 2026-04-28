@@ -1,13 +1,15 @@
 <?php
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Tymon\JWTAuth\Contracts\JWTSubject;
 
 class User extends Authenticatable implements JWTSubject
 {
-    use Notifiable;
+    use HasFactory, Notifiable;
 
     protected $fillable = [
         'name',
@@ -41,5 +43,18 @@ class User extends Authenticatable implements JWTSubject
     public function getJWTCustomClaims()
     {
         return [];
+    }
+
+    /**
+     * Get all courts owned by this user
+     * 
+     * Pattern: Relationship (HasMany)
+     * SOLID: Single Responsibility - Model manages relationships
+     * 
+     * @return HasMany
+     */
+    public function courts(): HasMany
+    {
+        return $this->hasMany(Court::class, 'owner_id');
     }
 }
