@@ -7,10 +7,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-use App\Models\User;
-use App\Models\Field;
-use App\Models\CourtImage;
-
 class Court extends Model
 {
     use HasFactory;
@@ -26,19 +22,29 @@ class Court extends Model
         'description',
         'open_time',
         'close_time',
-        'status'
+        'status',
+        'is_active'
     ];
 
+    /**
+     * Owner của sân
+     */
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'owner_id');
     }
 
+    /**
+     * Danh sách sân con
+     */
     public function fields(): HasMany
     {
         return $this->hasMany(Field::class);
     }
 
+    /**
+     * Danh sách ảnh
+     */
     public function images(): HasMany
     {
         return $this->hasMany(CourtImage::class);
