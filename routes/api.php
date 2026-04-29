@@ -1,33 +1,32 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CourtController; // giữ thêm cái này
+use App\Http\Controllers\OwnerCourtController;
+use App\Http\Controllers\AdminCourtController;
+
 
 Route::get('/test', function () {
     return response()->json([
         'message' => 'API OK'
     ]);
 });
-use App\Http\Controllers\AuthController;
-use App\Http\Controllers\CourtController;
-use App\Http\Controllers\OwnerCourtController;
-use App\Http\Controllers\AdminCourtController;
 
+
+/**
+ * Authentication Routes
+ */
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/register', [AuthController::class, 'register']); // giữ của bạn
 
-/*
-|--------------------------------------------------------------------------
-| USER - Xem sân
-|--------------------------------------------------------------------------
-*/
+/**
+ * Court Routes
+ */
+Route::get('/courts/{id}', [CourtController::class, 'show']); // giữ của main
 
-// Danh sách sân đã duyệt
-Route::get('/courts', [CourtController::class, 'getApprovedCourts']);
+Route::middleware('auth:api')->get('/me', [AuthController::class, 'me']);
 
-// Chi tiết sân
-Route::get('/courts/{id}', [CourtController::class, 'getCourtDetail']);
-
-// Tìm sân theo giờ
-Route::get('/courts/search', [CourtController::class, 'searchCourt']);
 
 
 /*
