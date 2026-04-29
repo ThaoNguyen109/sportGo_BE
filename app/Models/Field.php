@@ -5,14 +5,12 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Field extends Model
 {
     use HasFactory;
 
-    /**
-     * Fillable attributes
-     */
     protected $fillable = [
         'court_id',
         'name',
@@ -20,13 +18,18 @@ class Field extends Model
     ];
 
     /**
-     * Get the court this field belongs to
-     * 
-     * Pattern: Inverse Relationship
-     * SOLID: Single Responsibility - Model manages own relationships
+     * Sân cha
      */
     public function court(): BelongsTo
     {
         return $this->belongsTo(Court::class);
+    }
+
+    /**
+     * Danh sách giá theo khung giờ
+     */
+    public function prices(): HasMany
+    {
+        return $this->hasMany(FieldPrice::class);
     }
 }
