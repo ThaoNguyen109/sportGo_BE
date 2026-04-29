@@ -2,6 +2,10 @@
 
 namespace App\Providers;
 
+<<<<<<< HEAD
+use Illuminate\Support\ServiceProvider;
+
+=======
 use App\Contracts\CourtRepositoryInterface;
 use App\Repositories\CourtRepository;
 use Illuminate\Support\ServiceProvider;
@@ -29,10 +33,17 @@ use Illuminate\Support\ServiceProvider;
  * 
  * This is called DEPENDENCY INJECTION (DI)
  */
+>>>>>>> origin/main
 class AppServiceProvider extends ServiceProvider
 {
     /**
      * Register any application services.
+<<<<<<< HEAD
+     */
+    public function register(): void
+    {
+        //
+=======
      * 
      * This is where we bind interfaces to implementations
      * Called when application starts
@@ -56,13 +67,17 @@ class AppServiceProvider extends ServiceProvider
             CourtRepositoryInterface::class,
             CourtRepository::class
         );
+>>>>>>> origin/main
     }
 
     /**
      * Bootstrap any application services.
+<<<<<<< HEAD
+=======
      * 
      * Called after all services are registered
      * Use for boot-time logic
+>>>>>>> origin/main
      */
     public function boot(): void
     {

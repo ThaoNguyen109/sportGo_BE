@@ -2,7 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\CourtController;
+use App\Http\Controllers\CourtController; // giữ thêm cái này
 
 Route::get('/test', function () {
     return response()->json([
@@ -14,21 +14,11 @@ Route::get('/test', function () {
  * Authentication Routes
  */
 Route::post('/login', [AuthController::class, 'login']);
+Route::post('/register', [AuthController::class, 'register']); // giữ của bạn
 
 /**
  * Court Routes
- * 
- * GET /api/courts/{id} - Get court detail by ID
- * 
- * Pattern: RESTful API design
- * Reason: Standard convention for web APIs
- * 
- * SOLID: Single Responsibility
- * Route maps URL to controller action
- * Controller handles HTTP, Service handles business logic
- * 
- * Example:
- * GET /api/courts/1
- * Response: Court detail with owner, fields, images
  */
-Route::get('/courts/{id}', [CourtController::class, 'show']);
+Route::get('/courts/{id}', [CourtController::class, 'show']); // giữ của main
+
+Route::middleware('auth:api')->get('/me', [AuthController::class, 'me']);
