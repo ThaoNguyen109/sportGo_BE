@@ -96,8 +96,12 @@ class CourtController extends Controller
 
         } catch (Exception $e) {
             // Catch business logic exceptions (e.g., court not found)
-            // Status code is in exception
-            $statusCode = $e->getCode() ?: 500;
+            $statusCode = (int) ($e->getCode() ?: 500);
+
+            // Ensure status code is valid HTTP status code (100-599)
+            if ($statusCode < 100 || $statusCode > 599) {
+                $statusCode = 500;
+            }
 
             return response()->json([
                 'success' => false,
@@ -117,6 +121,108 @@ class CourtController extends Controller
                 'success' => false,
                 'message' => 'Lỗi máy chủ'
             ], 500);
+        }
+    }
+
+    /**
+     * Get field prices for a court
+     *
+     * Route: GET /api/courts/{id}/prices
+     * Response: 200 | 404 | 500
+     *
+     * SOLID: Single Responsibility
+     * This method:
+     * 1. Validates HTTP input (court_id parameter)
+     * 2. Calls Service for business logic
+     * 3. Returns HTTP response
+     * Does NOT: query database, transform data, check permissions
+     *
+     * Pattern: Action/Handler pattern
+     *
+     * @param int $courtId Court ID from URL parameter
+     * @return JsonResponse JSON response with field prices data
+     */
+    public function getFieldPrices(int $courtId): JsonResponse
+    {
+        try {
+            // Validate input (basic validation - business rules in Service)
+            if ($courtId <= 0) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'ID sân không hợp lệ'
+                ], 400);
+            }
+
+            // Call Service for business logic
+            // Service handles:
+            // - Retrieving from repository
+            // - Court existence validation
+            // - Permission checks (future)
+            // - Data transformation
+            $pricesData = $this->courtService->getFieldPrices($courtId);
+
+            // Return success response
+            return response()->json([
+                'success' => true,
+                'message' => 'Lấy giá sân thành công',
+                'data' => $pricesData
+            ], 200);
+
+        } catch (Exception $e) {
+            // Catch business logic exceptions (e.g., court not found)
+            $statusCode = (int) ($e->getCode() ?: 500);
+
+            // Ensure status code is valid HTTP status code (100-599)
+            if ($statusCode < 100 || $statusCode > 599) {
+                $statusCode = 500;
+            }
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], $statusCode);
+
+        } catch (\Throwable $e) {
+            // Catch unexpected errors
+            \Log::error('CourtController@getFieldPrices error', [
+                'court_id' => $courtId,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Lỗi máy chủ'
+            ], 500);
+        }
+    }
+
+    /**
+     * GET /api/courts/{id}/slots?date=2026-05-10
+     * Lấy toàn bộ slot kèm trạng thái để frontend tô màu.
+     */
+    public function getSlots(\Illuminate\Http\Request $request, int $id): JsonResponse
+    {
+        $validated = $request->validate([
+            'date' => 'required|date|after_or_equal:today',
+        ]);
+
+        try {
+            $data = $this->courtService->getSlotsByCourt($id, $validated['date']);
+
+            return response()->json([
+                'success' => true,
+                'data'    => $data,
+            ]);
+
+        } catch (Exception $e) {
+            $statusCode = ($e->getCode() >= 400 && $e->getCode() <= 599)
+                ? $e->getCode() : 500;
+
+            return response()->json([
+                'success' => false,
+                'message' => $e->getMessage(),
+            ], $statusCode);
         }
     }
 }

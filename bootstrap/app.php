@@ -12,8 +12,13 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // Tắt CSRF cho IPN webhook của MoMo
+        // Vì MoMo gọi callback không kèm CSRF token
+        $middleware->validateCsrfTokens(except: [
+            'api/payments/momo/ipn',
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //
     })->create();
+

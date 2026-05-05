@@ -51,9 +51,22 @@ interface CourtRepositoryInterface
 
     /**
      * Delete court
-     * 
+     *
      * @param int $id Court ID
      * @return bool
      */
     public function delete(int $id): bool;
+
+    /**
+     * Get field prices for a court
+     *
+     * @param int $courtId Court ID
+     * @return mixed Collection of field prices with field info
+     */
+    public function getFieldPrices(int $courtId);
+
+    /**
+     * Lấy tất cả field đang active của một court.
+     */
+    public function getActiveFields(int $courtId): mixed;
 }

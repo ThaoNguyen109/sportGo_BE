@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Contracts\CourtRepositoryInterface;
 use Exception;
+use App\Services\BookingService;
 
 /**
  * CourtService
@@ -54,9 +55,10 @@ class CourtService
      * 
      * @param CourtRepositoryInterface $courtRepository Data access layer
      */
-    public function __construct(CourtRepositoryInterface $courtRepository)
+    public function __construct(CourtRepositoryInterface $courtRepository,Private BookingService $bookingService)
     {
         $this->courtRepository = $courtRepository;
+        $this->bookingService = $bookingService;
     }
 
     /**
@@ -94,6 +96,119 @@ class CourtService
 
         // Format response (SOLID: Data transformation is business logic)
         return $this->formatCourtData($court);
+    }
+
+    /**
+     * Get field prices for a court
+     *
+     * SOLID: Single Responsibility - handles field pricing business logic
+     * This Service layer adds:
+     * 1. Court existence validation
+     * 2. Could add permission checks (future)
+     * 3. Data formatting for API
+     * 4. Could add caching (future)
+     *
+     * Future enhancements:
+     * - Add permission check: can user view prices?
+     * - Add availability check: show available time slots
+     * - Add dynamic pricing: different prices for peak hours
+     * - Add discount logic: member discounts, bulk booking
+     *
+     * @param int $courtId Court ID
+     * @return array Formatted field prices data
+     * @throws Exception If court not found
+     */
+    public function getFieldPrices(int $courtId): array
+    {
+        // Business rule: Validate court exists and is accessible
+        $court = $this->courtRepository->findById($courtId);
+        if (!$court) {
+            throw new Exception("Sân vận động không tồn tại", 404);
+        }
+
+        // Business rule: Could add permission check here
+        // Example: if court is private, only owner can view prices
+
+        // Get field prices from repository
+        $fieldsWithPrices = $this->courtRepository->getFieldPrices($courtId);
+
+        // Format response (SOLID: Data transformation is business logic)
+        return $this->formatFieldPricesData($fieldsWithPrices, $court);
+    }
+
+    /**
+     * Format field prices data for API response
+     *
+     * SOLID: Single Responsibility - handles data formatting
+     * Pattern: Data Transformer/Presenter
+     * Reason: Centralize API response structure
+     *
+     * @param Collection $fieldsWithPrices Fields with their prices
+     * @param object $court Court data
+     * @return array Formatted field prices data
+     */
+    private function formatFieldPricesData($fieldsWithPrices, $court): array
+    {
+        return [
+            'court' => [
+                'id'      => $court->id,
+                'name'    => $court->name,
+                'address' => $court->address,
+            ],
+            'fields' => $fieldsWithPrices->map(function ($field) {
+                // Group các khung giờ theo từng ngày trong tuần
+                $byDay = $field->prices
+                    ->groupBy('day_of_week')
+                    ->map(function ($slots, $dayOfWeek) {
+                        return [
+                            'day_of_week' => (int) $dayOfWeek,
+                            'day_name'    => $this->getDayName((int) $dayOfWeek),
+                            'slots'       => $slots->map(function ($price) {
+                                return [
+                                    'id'         => $price->id,
+                                    'start_time' => substr($price->start_time, 0, 5), // "08:00:00" → "08:00"
+                                    'end_time'   => substr($price->end_time, 0, 5),
+                                    'price'      => (float) $price->price,
+                                    'is_active'  => (bool) $price->is_active,
+                                ];
+                            })->values(),
+                        ];
+                    })
+                    ->sortKeys()   // sắp xếp theo thứ (1→7)
+                    ->values();
+
+                return [
+                    'id'       => $field->id,
+                    'name'     => $field->name,
+                    'schedule' => $byDay,  // mỗi phần tử = 1 ngày, có danh sách slot+giá
+                ];
+            })->values(),
+        ];
+    }
+
+    /**
+     * Get day name from day of week number
+     *
+     * Pattern: Helper method
+     * Reason: Convert numeric day to readable name
+     * SOLID: Single Responsibility - utility function
+     *
+     * @param int $dayOfWeek 1=Monday, 7=Sunday
+     * @return string Day name in Vietnamese
+     */
+    private function getDayName(int $dayOfWeek): string
+    {
+        $days = [
+            1 => 'Thứ Hai',
+            2 => 'Thứ Ba',
+            3 => 'Thứ Tư',
+            4 => 'Thứ Năm',
+            5 => 'Thứ Sáu',
+            6 => 'Thứ Bảy',
+            7 => 'Chủ Nhật',
+        ];
+
+        return $days[$dayOfWeek] ?? 'Không xác định';
     }
 
     /**
@@ -149,6 +264,46 @@ class CourtService
             ])->values(),
             'created_at' => $court->created_at,
             'updated_at' => $court->updated_at,
+        ];
+    }
+
+    /**
+     * Lấy toàn bộ slot của tất cả field trong một court vào một ngày,
+     * kèm trạng thái để frontend tô màu.
+     *
+     * @param int    $courtId
+     * @param string $date
+     * @return array
+     * @throws Exception
+     */
+    public function getSlotsByCourt(int $courtId, string $date): array
+    {
+        $court = $this->courtRepository->findById($courtId);
+        if (!$court) {
+            throw new Exception('Sân không tồn tại.', 404);
+        }
+
+        $fields = $this->courtRepository->getActiveFields($courtId);
+        if ($fields->isEmpty()) {
+            throw new Exception('Sân không có field nào đang hoạt động.', 404);
+        }
+
+        $result = [];
+        foreach ($fields as $field) {
+            $slots = $this->bookingService->getAllSlotsWithStatus($field->id, $date);
+
+            $result[] = [
+                'field_id'   => $field->id,
+                'field_name' => $field->name,
+                'slots'      => $slots,
+            ];
+        }
+
+        return [
+            'court_id'   => $court->id,
+            'court_name' => $court->name,
+            'date'       => $date,
+            'fields'     => $result,
         ];
     }
 }

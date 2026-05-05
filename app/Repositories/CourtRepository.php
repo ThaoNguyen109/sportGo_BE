@@ -4,6 +4,7 @@ namespace App\Repositories;
 
 use App\Contracts\CourtRepositoryInterface;
 use App\Models\Court;
+use App\Models\Field;
 use Illuminate\Support\Collection;
 
 /**
@@ -116,12 +117,52 @@ class CourtRepository implements CourtRepositoryInterface
 
     /**
      * Delete court
-     * 
+     *
      * @param int $id
      * @return bool
      */
     public function delete(int $id): bool
     {
         return $this->model->destroy($id) > 0;
+    }
+
+    /**
+     * Get field prices for a court
+     *
+     * SOLID: Single Responsibility - only retrieves field price data
+     * Pattern: Eager Loading to avoid N+1 queries
+     *   Gets court fields + their prices in optimized queries
+     *
+     * @param int $courtId Court ID
+     * @return Collection Field prices with field and court info
+     */
+    public function getFieldPrices(int $courtId)
+    {
+        // First check if court exists and is not rejected
+        $court = $this->model->where('id', $courtId)
+                            ->where('status', '!=', 'rejected')
+                            ->exists();
+
+        if (!$court) {
+            return collect(); // Return empty collection if court not found
+        }
+
+        // Get all active fields with their active prices
+        return Field::where('court_id', $courtId)
+            ->where('is_active', true)
+            ->with([
+                'prices' => function ($query) {
+                    $query->orderBy('start_time');
+                }
+            ])
+            ->get();
+    }
+
+    public function getActiveFields(int $courtId): mixed
+    {
+        return \App\Models\Field::where('court_id', $courtId)
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
     }
 }
