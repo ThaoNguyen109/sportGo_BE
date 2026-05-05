@@ -10,19 +10,13 @@ class CourtImage extends Model
 {
     use HasFactory;
 
-    /**
-     * Fillable attributes
-     */
     protected $fillable = [
         'court_id',
         'image_url'
     ];
 
     /**
-     * Get the court this image belongs to
-     * 
-     * Pattern: Inverse Relationship
-     * SOLID: Single Responsibility
+     * Ảnh thuộc về sân nào
      */
     public function court(): BelongsTo
     {

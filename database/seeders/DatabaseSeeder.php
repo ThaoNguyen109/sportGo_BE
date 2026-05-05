@@ -15,6 +15,13 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+<<<<<<< HEAD
+        // User::factory(10)->create();
+
+        User::factory()->create([
+            'name' => 'Test User',
+            'email' => 'test@example.com',
+=======
         // Create test users
         User::factory(5)->create();
 
@@ -27,6 +34,7 @@ class DatabaseSeeder extends Seeder
             BookingSeeder::class,
             BookingDetailSeeder::class,
             NotificationSeeder::class,
+>>>>>>> origin/main
         ]);
     }
 }

@@ -11,10 +11,6 @@ class Court extends Model
 {
     use HasFactory;
 
-    /**
-     * Fillable attributes for mass assignment
-     * SOLID: Single Responsibility - Model defines data, Service/Controller handle access
-     */
     protected $fillable = [
         'owner_id',
         'name',
@@ -26,15 +22,12 @@ class Court extends Model
         'description',
         'open_time',
         'close_time',
-        'status'
+        'status',
+        'is_active'
     ];
 
     /**
-     * Get the owner (User) of this court
-     * 
-     * Pattern: Relationship Pattern (Eloquent ORM)
-     * Reason: Simplify accessing related data without N+1 queries
-     * SOLID: Single Responsibility - Model manages relationships
+     * Owner của sân
      */
     public function owner(): BelongsTo
     {

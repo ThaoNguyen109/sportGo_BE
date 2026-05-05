@@ -1,4 +1,5 @@
 <?php
+
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -34,7 +35,9 @@ class User extends Authenticatable implements JWTSubject
         ];
     }
 
-    // 🔥 JWT bắt buộc
+    /**
+     * JWT
+     */
     public function getJWTIdentifier()
     {
         return $this->getKey();
@@ -46,12 +49,7 @@ class User extends Authenticatable implements JWTSubject
     }
 
     /**
-     * Get all courts owned by this user
-     * 
-     * Pattern: Relationship (HasMany)
-     * SOLID: Single Responsibility - Model manages relationships
-     * 
-     * @return HasMany
+     * Danh sách sân của owner
      */
     public function courts(): HasMany
     {
