@@ -1,71 +1,71 @@
 <?php
 
-use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\AuthController;
-use App\Http\Controllers\CourtController;
 use App\Http\Controllers\BookingController;
+use App\Http\Controllers\CourtController;
 use App\Http\Controllers\PaymentController;
+use Illuminate\Support\Facades\Route;
 
-Route::get('/test', function () {
-    return response()->json([
-        'message' => 'API OK'
-    ]);
+/*
+|--------------------------------------------------------------------------
+| API Routes — SportGo
+|--------------------------------------------------------------------------
+*/
+
+// ─── Health check ─────────────────────────────────────────────────────────
+Route::get('/test', fn () => response()->json(['message' => 'API OK']));
+
+// ─── Auth (không cần đăng nhập) ───────────────────────────────────────────
+Route::prefix('auth')->group(function () {
+    Route::post('/register', [AuthController::class, 'register']);
+    Route::post('/login',    [AuthController::class, 'login']);
 });
 
 /**
  * Authentication
  */
+// Alias backward-compatible: /api/login → /api/auth/login (giữ để không vỡ Postman cũ)
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
 Route::middleware('auth:api')->get('/me', [AuthController::class, 'me']);
 
-/**
- * Court Routes
- * 
- * GET /api/courts/{id} - Get court detail by ID
- * GET /api/courts/{id}/prices - Get field prices for a court
- * 
- * Pattern: RESTful API design
- * Reason: Standard convention for web APIs
- * 
- * SOLID: Single Responsibility
- * Route maps URL to controller action
- * Controller handles HTTP, Service handles business logic
- * 
- * Example:
- * GET /api/courts/1
- * Response: Court detail with owner, fields, images
- * 
- * GET /api/courts/1/prices
- * Response: Field prices with time slots and pricing
- */
-Route::get('/courts/{id}', [CourtController::class, 'show']);
-Route::get('/courts/{id}/prices', [CourtController::class, 'getFieldPrices']);
-
-
-// Routes cần đăng nhập
-Route::middleware('auth:api')->group(function () {
-    Route::post('/bookings/reserve', [BookingController::class, 'reserve']);
-    Route::delete('/bookings/cancel/{id}',  [BookingController::class, 'cancel']);
-    Route::get('/slots/status',      [BookingController::class, 'checkSlotStatus']);
+// ─── Auth (cần đăng nhập) ─────────────────────────────────────────────────
+Route::prefix('auth')->middleware('auth:api')->group(function () {
+    Route::post('/logout',  [AuthController::class, 'logout']);
+    Route::post('/refresh', [AuthController::class, 'refresh']);
+    Route::get('/me',       [AuthController::class, 'me']);
 });
 
-if (app()->environment('local') || env('ENABLE_TEST_LOGIN', false)) {
-    Route::post('/test-login', [AuthController::class, 'fakeLogin']);
-}
+// ─── Courts (công khai — ai cũng xem được) ────────────────────────────────
+Route::prefix('courts')->group(function () {
+    Route::get('/',              [CourtController::class, 'index']);
+    Route::get('/{id}',          [CourtController::class, 'show']);
+    Route::get('/{id}/prices',   [CourtController::class, 'getFieldPrices']);
+    Route::get('/{id}/slots',    [CourtController::class, 'getSlots']);
+});
 
-// Không cần auth — ai cũng xem được lịch sân
-Route::get('/courts/{id}/slots', [CourtController::class, 'getSlots']);
+// Trạng thái slot (công khai)
+Route::get('/slots/status', [BookingController::class, 'checkSlotStatus']);
 
-// Webhook thanh toán (không cần auth user)
-Route::post('/bookings/{id}/confirm', [BookingController::class, 'confirm']);
+// ─── Bookings (cần đăng nhập) ─────────────────────────────────────────────
+Route::middleware('auth:api')->group(function () {
+    Route::get('/bookings',          [BookingController::class, 'index']);   // Lịch sử đặt sân
+    Route::get('/bookings/{id}',     [BookingController::class, 'show']);    // Chi tiết booking
+    Route::post('/bookings/reserve', [BookingController::class, 'reserve']); // Đặt sân
+    Route::delete('/bookings/{id}',  [BookingController::class, 'cancel']);  // Huỷ booking
+    Route::post('/bookings/{id}/refund', [BookingController::class, 'requestRefund']); // Yêu cầu hoàn tiền
+});
 
-// Tạo link thanh toán (cần đăng nhập)
+// ─── Payments (cần đăng nhập) ─────────────────────────────────────────────
 Route::middleware('auth:api')->group(function () {
     Route::post('/payments/momo/create', [PaymentController::class, 'createMomoPayment']);
 });
 
-// MoMo callback — KHÔNG cần auth
+// MoMo callback — KHÔNG cần auth (MoMo server gọi)
 Route::post('/payments/momo/ipn',    [PaymentController::class, 'momoIpn']);
 Route::get('/payments/momo/return',  [PaymentController::class, 'momoReturn']);
 
+// ─── Dev only: fake login không cần password ──────────────────────────────
+// if (app()->environment('local') || env('ENABLE_TEST_LOGIN', false)) {
+//     Route::post('/test-login', [AuthController::class, 'fakeLogin']);
+// }

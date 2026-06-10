@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Services\AuthService;
 use App\Models\User;
+use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
 {
@@ -59,35 +60,101 @@ class AuthController extends Controller
     }
 
     public function fakeLogin(Request $request)
-    {
-        if (!app()->environment('local') && !env('ENABLE_TEST_LOGIN', false)) {
-            return response()->json(['message' => 'Fake login disabled'], 403);
-        }
 
-        $validated = $request->validate([
-            'user_id' => 'nullable|integer|exists:users,id',
-            'email'   => 'nullable|email|exists:users,email',
+    public function register(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'name' => 'required|string|max:255',
+            'email' => 'required|email|unique:users,email',
+            'phone' => 'nullable|string|max:20|unique:users,phone',
+            'password' => 'required|string|min:6|confirmed',
+            'role' => 'nullable|in:user,owner',
         ]);
 
-        if (empty($validated['user_id']) && empty($validated['email'])) {
+        if ($validator->fails()) {
             return response()->json([
-                'message' => 'user_id hoặc email là bắt buộc để fake login'
+                'message' => 'Validate lỗi',
+                'errors' => $validator->errors()
             ], 422);
         }
 
-        $user = $validated['user_id']
-            ? User::find($validated['user_id'])
-            : User::where('email', $validated['email'])->first();
-
-        if (!$user) {
-            return response()->json(['message' => 'Không tìm thấy user'], 404);
-        }
-
-        $token = auth()->login($user);
+        $result = $this->authService->register($request->only([
+            'name',
+            'email',
+            'phone',
+            'password',
+            'role'
+        ]));
 
         return response()->json([
-            'user'  => $user,
-            'token' => $token,
+            'message' => 'Đăng ký thành công',
+            'data' => $result
+        ], 201);
+    }
+
+    public function login(Request $request)
+{
+    $validator = Validator::make($request->all(), [
+        'email' => 'required|email',
+        'password' => 'required'
+    ]);
+
+    if ($validator->fails()) {
+        return response()->json([
+            'message' => 'Validate lỗi',
+            'errors' => $validator->errors()
+        ], 422);
+    }
+
+    $result = $this->authService->login(
+        $request->email,
+        $request->password
+    );
+
+    if (!$result['success']) {
+        return response()->json([
+            'message' => $result['message']
+        ], $result['status']);
+    }
+
+    return response()->json([
+        'user' => $result['user'],
+        'token' => $result['token']
+    ], 200);
+}
+
+    public function me()
+    {
+        return response()->json([
+            'user' => auth('api')->user()
         ]);
+    }
+
+    /**
+     * Đăng xuất người dùng (thu hồi token JWT)
+     */
+    public function logout()
+    {
+        $this->authService->logout();
+        return response()->json([
+            'message' => 'Đăng xuất thành công'
+        ], 200);
+    }
+
+    /**
+     * Làm mới token JWT
+     */
+    public function refresh()
+    {
+        try {
+            $newToken = $this->authService->refresh();
+            return response()->json([
+                'token' => $newToken
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Không thể làm mới token'
+            ], 401);
+        }
     }
 }

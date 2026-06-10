@@ -25,10 +25,10 @@ class BookingRepository implements BookingRepositoryInterface
         return $this->bookingDetail->create($data);
     }
 
-    // Tìm booking theo ID, load kèm details
+    // Tìm booking theo ID, load kèm details + refundRequest
     public function findById(int $id): ?object
     {
-        return $this->booking->with('details')->find($id);
+        return $this->booking->with(['details', 'refundRequest'])->find($id);
     }
 
     // Cập nhật trạng thái booking
@@ -67,8 +67,8 @@ class BookingRepository implements BookingRepositoryInterface
             ->join('bookings', 'bookings.id', '=', 'booking_details.booking_id')
             ->where('booking_details.field_id', $fieldId)
             ->where('booking_details.booking_date', $date)
-            ->where('bookings.status', 'paid')
-            ->select('booking_details.start_time', 'booking_details.end_time')
+            ->whereIn('bookings.status', ['paid', 'pending'])
+            ->select('booking_details.start_time', 'booking_details.end_time', 'bookings.status')
             ->get();
 
         // Tạo map để lookup O(1) thay vì O(n)
@@ -76,10 +76,26 @@ class BookingRepository implements BookingRepositoryInterface
         $map = [];
         foreach ($rows as $row) {
             $key       = substr($row->start_time, 0, 5) . '-' . substr($row->end_time, 0, 5);
-            $map[$key] = true;
+            $map[$key] = $row->status; // 'paid' or 'pending'
         }
 
         return $map;
     }
-    
+
+    /**
+     * Lấy tất cả booking của một user, sắp xếp mới nhất trước.
+     * Eager load details + field để tránh N+1.
+     */
+    public function getByUserId(int $userId): object
+    {
+        return $this->booking
+            ->with([
+                'details.field:id,name,court_id',
+                'details.field.court:id,name,address',
+                'refundRequest',
+            ])
+            ->where('user_id', $userId)
+            ->latest()
+            ->get();
+    }
 }

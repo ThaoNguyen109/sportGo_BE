@@ -51,6 +51,56 @@ class CourtController extends Controller
     }
 
     /**
+     * Get all courts
+     *
+     * Route: GET /api/courts
+     * Query params (tùy chọn):
+     *   - lat, lng         : Tọa độ người dùng → trả kèm distance_km, sắp xếp gần nhất trước
+     *   - max_distance     : Bán kính tối đa (km), chỉ hoạt động khi có lat+lng
+     * Response: 200 | 422 | 500
+     */
+    public function index(\Illuminate\Http\Request $request): JsonResponse
+    {
+        $request->validate([
+            'lat'          => 'nullable|numeric|between:-90,90',
+            'lng'          => 'nullable|numeric|between:-180,180',
+            'max_distance' => 'nullable|numeric|min:0.1|max:200',
+        ]);
+
+        // lat và lng phải được gửi cùng nhau
+        if ($request->filled('lat') !== $request->filled('lng')) {
+            return response()->json([
+                'success' => false,
+                'message' => 'lat và lng phải được cung cấp cùng nhau.',
+            ], 422);
+        }
+
+        try {
+            $courts = $this->courtService->getAllCourts(
+                $request->only(['lat', 'lng', 'max_distance'])
+            );
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Lấy danh sách sân thành công',
+                'total'   => count($courts),
+                'data'    => $courts,
+            ], 200);
+
+        } catch (\Throwable $e) {
+            \Log::error('CourtController@index error', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Lỗi máy chủ',
+            ], 500);
+        }
+    }
+
+    /**
      * Get court detail by ID
      * 
      * Route: GET /api/courts/{id}
@@ -68,10 +118,14 @@ class CourtController extends Controller
      * @param int $id Court ID from URL parameter
      * @return JsonResponse JSON response with court data
      */
-    public function show(int $id): JsonResponse
+    public function show(\Illuminate\Http\Request $request, int $id): JsonResponse
     {
+        $request->validate([
+            'lat' => 'nullable|numeric|between:-90,90',
+            'lng' => 'nullable|numeric|between:-180,180',
+        ]);
+
         try {
-            // Validate input (basic validation - business rules in Service)
             if ($id <= 0) {
                 return response()->json([
                     'success' => false,
@@ -79,19 +133,27 @@ class CourtController extends Controller
                 ], 400);
             }
 
-            // Call Service for business logic
-            // Service handles:
-            // - Retrieving from repository
-            // - Null checking
-            // - Permission checks (future)
-            // - Data transformation
             $courtData = $this->courtService->getCourtDetail($id);
 
-            // Return success response
+            // Tính khoảng cách nếu frontend gửi tọa độ
+            if ($request->filled('lat') && $request->filled('lng')
+                && $courtData['location']['latitude']
+                && $courtData['location']['longitude']
+            ) {
+                $courtData['distance_km'] = $this->courtService->calculateDistance(
+                    (float) $request->lat,
+                    (float) $request->lng,
+                    (float) $courtData['location']['latitude'],
+                    (float) $courtData['location']['longitude']
+                );
+            } else {
+                $courtData['distance_km'] = null;
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Lấy thông tin sân thành công',
-                'data' => $courtData
+                'data'    => $courtData,
             ], 200);
 
         } catch (Exception $e) {
@@ -200,12 +262,27 @@ class CourtController extends Controller
     /**
      * GET /api/courts/{id}/slots?date=2026-05-10
      * Lấy toàn bộ slot kèm trạng thái để frontend tô màu.
+     *
+     * Validation dùng Carbon::today(timezone VN) thay vì 'today' mặc định của Laravel
+     * để tránh lỗi timezone khi server chạy UTC (UTC+0) nhưng user ở Việt Nam (UTC+7).
      */
     public function getSlots(\Illuminate\Http\Request $request, int $id): JsonResponse
     {
         $validated = $request->validate([
-            'date' => 'required|date|after_or_equal:today',
+            'date' => 'required|date',
         ]);
+
+        // So sánh ngày theo đúng timezone ứng dụng (Asia/Ho_Chi_Minh)
+        $tz      = config('app.timezone', 'Asia/Ho_Chi_Minh');
+        $today   = \Carbon\Carbon::today($tz)->startOfDay();
+        $picked  = \Carbon\Carbon::parse($validated['date'], $tz)->startOfDay();
+
+        if ($picked->lt($today)) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Ngày không hợp lệ. Vui lòng chọn ngày hôm nay hoặc trong tương lai.',
+            ], 422);
+        }
 
         try {
             $data = $this->courtService->getSlotsByCourt($id, $validated['date']);

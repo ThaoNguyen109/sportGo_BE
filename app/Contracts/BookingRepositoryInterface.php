@@ -10,4 +10,9 @@ interface BookingRepositoryInterface
     public function updateStatus(int $id, string $status, ?string $paymentMethod = null): bool;
     public function isSlotBooked(int $fieldId, string $date, string $startTime, string $endTime): bool;
     public function getBookedSlotsMap(int $fieldId, string $date): array;
+
+    /**
+     * Lấy tất cả booking của một user, sắp xếp mới nhất trước.
+     */
+    public function getByUserId(int $userId): object;
 }

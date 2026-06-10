@@ -131,6 +131,116 @@ class BookingService
         return true;
     }
 
+    /**
+     * Lấy lịch sử đặt sân của một user.
+     *
+     * @param int $userId
+     * @return array
+     */
+    public function getBookingHistory(int $userId): array
+    {
+        $bookings = $this->bookingRepository->getByUserId($userId);
+
+        return $bookings->map(fn($b) => $this->formatBookingSummary($b))->values()->all();
+    }
+
+    /**
+     * Lấy chi tiết một booking (chỉ chủ sử hữu mới xem được).
+     *
+     * @param int $bookingId
+     * @param int $userId
+     * @return array
+     * @throws Exception
+     */
+    public function getBookingDetail(int $bookingId, int $userId): array
+    {
+        $booking = $this->bookingRepository->findById($bookingId);
+
+        if (!$booking) {
+            throw new Exception('Booking không tồn tại.', 404);
+        }
+        if ($booking->user_id !== $userId) {
+            throw new Exception('Bạn không có quyền xem booking này.', 403);
+        }
+
+        return $this->formatBookingDetail($booking);
+    }
+
+    /**
+     * Format tóm tắt booking cho danh sách lịch sử.
+     */
+    private function formatBookingSummary(object $booking): array
+    {
+        $firstDetail = $booking->details->first();
+        
+        // Xác định trạng thái hoàn tiền động
+        $status = $booking->status;
+        if ($booking->refundRequest) {
+            if ($booking->refundRequest->status === 'completed') {
+                $status = 'refunded';
+            } elseif ($booking->refundRequest->status === 'pending') {
+                $status = 'refunding'; // Đang chờ duyệt hoàn tiền
+            }
+        }
+
+        return [
+            'id'             => $booking->id,
+            'status'         => $status,
+            'total_price'    => (float) $booking->total_price,
+            'payment_method' => $booking->payment_method,
+            'slots_count'    => $booking->details->count(),
+            'first_date'     => $booking->details->min('booking_date') instanceof \Carbon\Carbon
+                                ? $booking->details->min('booking_date')->format('Y-m-d')
+                                : $booking->details->min('booking_date'),
+            'court_name'     => $firstDetail?->field?->court?->name ?? 'Sân Thể Thao',
+            'address'        => $firstDetail?->field?->court?->address ?? '',
+            'created_at'     => $booking->created_at,
+            'slots'          => $booking->details->map(fn($d) => [
+                'id'           => $d->id,
+                'field_name'   => $d->field?->name ?? 'Sân con',
+                'booking_date' => $d->booking_date instanceof \Carbon\Carbon
+                                    ? $d->booking_date->format('Y-m-d')
+                                    : $d->booking_date,
+                'start_time'   => substr($d->start_time, 0, 5),
+                'end_time'     => substr($d->end_time, 0, 5),
+                'price'        => (float) $d->price,
+            ])->values(),
+        ];
+    }
+
+    /**
+     * Format chi tiết đầy đủ của một booking.
+     */
+    private function formatBookingDetail(object $booking): array
+    {
+        $status = $booking->status;
+        if ($booking->refundRequest) {
+            if ($booking->refundRequest->status === 'completed') {
+                $status = 'refunded';
+            } elseif ($booking->refundRequest->status === 'pending') {
+                $status = 'refunding';
+            }
+        }
+
+        return [
+            'id'             => $booking->id,
+            'status'         => $status,
+            'total_price'    => (float) $booking->total_price,
+            'payment_method' => $booking->payment_method,
+            'created_at'     => $booking->created_at,
+            'slots'          => $booking->details->map(fn($d) => [
+                'id'           => $d->id,
+                'field_id'     => $d->field_id,
+                'booking_date' => $d->booking_date instanceof \Carbon\Carbon
+                                    ? $d->booking_date->format('Y-m-d')
+                                    : $d->booking_date,
+                'start_time'   => substr($d->start_time, 0, 5),
+                'end_time'     => substr($d->end_time, 0, 5),
+                'price'        => (float) $d->price,
+            ])->values(),
+        ];
+    }
+
     // Chuyển booking_details thành mảng slot để thao tác Redis
     private function extractSlots($details): array
     {
@@ -142,6 +252,28 @@ class BookingService
             'start_time' => \Carbon\Carbon::parse($d->start_time)->format('H:i'),
             'end_time'   => \Carbon\Carbon::parse($d->end_time)->format('H:i'),
         ])->toArray();
+    }
+
+    /**
+     * Tự động quét và hủy các đơn hàng ở trạng thái PENDING quá 10 phút.
+     * Giải phóng Redis lock (nếu còn) và cập nhật DB status = 'cancelled'.
+     */
+    public function releaseExpiredBookings(): void
+    {
+        $expiredTime = \Carbon\Carbon::now()->subSeconds(600); // 10 phút trước
+
+        $expiredBookings = \App\Models\Booking::where('status', 'pending')
+            ->where('created_at', '<', $expiredTime)
+            ->with('details')
+            ->get();
+
+        foreach ($expiredBookings as $booking) {
+            $booking->update(['status' => 'cancelled']);
+
+            // Giải phóng Redis locks
+            $slots = $this->extractSlots($booking->details);
+            $this->slotLockService->releaseMultipleLocks($booking->user_id, $slots);
+        }
     }
 
     /**
@@ -158,6 +290,9 @@ class BookingService
      */
     public function getAllSlotsWithStatus(int $fieldId, string $date): array
     {
+        // 0. Tự động giải phóng các slot giữ chỗ hết hạn (quá 10 phút)
+        $this->releaseExpiredBookings();
+
         // 1. Tính thứ trong tuần (1=Monday ... 7=Sunday)
         $dayOfWeek = (int) \Carbon\Carbon::parse($date)->isoWeekday();
 
@@ -185,7 +320,7 @@ class BookingService
 
             // Ưu tiên check DB trước (booked là trạng thái cuối cùng, không đổi)
             if (isset($bookedMap[$slotKey])) {
-                $status            = 'booked';
+                $status            = $bookedMap[$slotKey] === 'paid' ? 'booked' : 'locked';
                 $expiresInSeconds  = null;
             } else {
                 // Check Redis lock
@@ -213,5 +348,71 @@ class BookingService
         }
 
         return $result;
+    }
+
+    /**
+     * Khởi tạo yêu cầu hoàn tiền cho một booking đã thanh toán.
+     *
+     * @param int   $bookingId
+     * @param int   $userId
+     * @param array $data       ['bank_name', 'bank_account_name', 'bank_account_number', 'reason']
+     * @return object           RefundRequest
+     * @throws \Exception
+     */
+    public function createRefundRequest(int $bookingId, int $userId, array $data): object
+    {
+        $booking = $this->bookingRepository->findById($bookingId);
+
+        if (!$booking) {
+            throw new \Exception('Đơn đặt sân không tồn tại.', 404);
+        }
+        if ($booking->user_id !== $userId) {
+            throw new \Exception('Bạn không có quyền yêu cầu hoàn tiền cho đơn hàng này.', 403);
+        }
+        if ($booking->status !== 'paid') {
+            throw new \Exception('Chỉ đơn đặt sân đã thanh toán mới được phép yêu cầu hoàn tiền.', 422);
+        }
+
+        // Kiểm tra điều kiện: Huỷ sân trước giờ bắt đầu ít nhất 3 tiếng
+        $earliestStart = null;
+        foreach ($booking->details as $detail) {
+            $slotDate = $detail->booking_date instanceof \Carbon\Carbon 
+                ? $detail->booking_date->format('Y-m-d') 
+                : $detail->booking_date;
+            $slotStart = \Carbon\Carbon::parse($slotDate . ' ' . $detail->start_time);
+            
+            if ($earliestStart === null || $slotStart->lt($earliestStart)) {
+                $earliestStart = $slotStart;
+            }
+        }
+
+        if ($earliestStart !== null) {
+            $limitTime = \Carbon\Carbon::now()->addHours(3);
+            if ($earliestStart->lt($limitTime)) {
+                throw new \Exception('Bạn chỉ được phép hủy đặt sân trước giờ bắt đầu ít nhất 3 tiếng.', 422);
+            }
+        }
+
+        // Kiểm tra xem đã có yêu cầu hoàn tiền nào đang chờ xử lý cho đơn này chưa
+        $exists = \App\Models\RefundRequest::where('booking_id', $bookingId)
+            ->whereIn('status', ['pending', 'completed'])
+            ->exists();
+        if ($exists) {
+            throw new \Exception('Đơn đặt sân này đã gửi yêu cầu hoàn tiền trước đó.', 409);
+        }
+
+        // Tạo bản ghi hoàn tiền
+        $refundRequest = \App\Models\RefundRequest::create([
+            'booking_id'          => $bookingId,
+            'user_id'             => $userId,
+            'bank_name'           => $data['bank_name'],
+            'bank_account_name'   => $data['bank_account_name'],
+            'bank_account_number' => $data['bank_account_number'],
+            'refund_amount'       => $booking->total_price,
+            'reason'              => $data['reason'] ?? null,
+            'status'              => 'pending',
+        ]);
+
+        return $refundRequest;
     }
 }

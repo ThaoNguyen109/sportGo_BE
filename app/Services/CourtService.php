@@ -99,6 +99,99 @@ class CourtService
     }
 
     /**
+     * Get all courts
+     *
+     * SOLID: Single Responsibility - handles listing all courts
+     *
+     * @param array $filters  Có thể chứa: lat, lng, max_distance
+     * @return array List of courts formatted for API response
+     */
+    public function getAllCourts(array $filters = []): array
+    {
+        $lat       = isset($filters['lat'])          ? (float) $filters['lat']          : null;
+        $lng       = isset($filters['lng'])          ? (float) $filters['lng']          : null;
+        $maxKm     = isset($filters['max_distance']) ? (float) $filters['max_distance'] : null;
+
+        // Nếu có tọa độ người dùng → dùng query Haversine kèm khoảng cách
+        if ($lat !== null && $lng !== null) {
+            $courts = $this->courtRepository->getAllWithDistance($lat, $lng, $maxKm);
+
+            return $courts->map(function ($court) use ($lat, $lng) {
+                $item                 = $this->formatCourtListItem($court);
+                $item['distance_km']  = $court->distance_km !== null
+                                        ? round((float) $court->distance_km, 1)
+                                        : null;
+                return $item;
+            })->values()->all();
+        }
+
+        // Không có tọa độ → trả danh sách thường, không có distance
+        $courts = $this->courtRepository->getAll();
+
+        return $courts->map(function ($court) {
+            $item                = $this->formatCourtListItem($court);
+            $item['distance_km'] = null;
+            return $item;
+        })->values()->all();
+    }
+
+    /**
+     * Tính khoảng cách giữa 2 tọa độ (Haversine — PHP)
+     * Dùng cho GET /courts/{id} đơn lẻ thay vì cần query DB.
+     *
+     * @param float $lat1  Vĩ độ điểm A
+     * @param float $lng1  Kinh độ điểm A
+     * @param float $lat2  Vĩ độ điểm B
+     * @param float $lng2  Kinh độ điểm B
+     * @return float khoảng cách (km), làm tròn 1 chữ số thập phân
+     */
+    public function calculateDistance(float $lat1, float $lng1, float $lat2, float $lng2): float
+    {
+        $earthRadius = 6371; // km
+
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLng = deg2rad($lng2 - $lng1);
+
+        $a = sin($dLat / 2) * sin($dLat / 2)
+           + cos(deg2rad($lat1)) * cos(deg2rad($lat2))
+           * sin($dLng / 2) * sin($dLng / 2);
+
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+
+        return round($earthRadius * $c, 1);
+    }
+
+    /**
+     * Format a single court item for the list view
+     *
+     * Lighter format than formatCourtData() — omits heavy nested data
+     * to keep the list response lean and fast.
+     *
+     * @param object $court Court model instance
+     * @return array
+     */
+    private function formatCourtListItem(object $court): array
+    {
+        return [
+            'id'          => $court->id,
+            'name'        => $court->name,
+            'address'     => $court->address,
+            'phone'       => $court->phone,
+            'status'      => $court->status,
+            'open_time'   => $court->open_time,
+            'close_time'  => $court->close_time,
+            'image'       => $court->image,
+            'fields_count'=> $court->fields->count(),
+            'owner'       => [
+                'id'    => $court->owner?->id,
+                'name'  => $court->owner?->name,
+                'email' => $court->owner?->email,
+            ],
+            'created_at'  => $court->created_at,
+        ];
+    }
+
+    /**
      * Get field prices for a court
      *
      * SOLID: Single Responsibility - handles field pricing business logic

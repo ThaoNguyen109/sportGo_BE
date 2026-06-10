@@ -33,4 +33,12 @@ class Booking extends Model
     {
         return $this->hasMany(BookingDetail::class);
     }
+
+    /**
+     * Một booking có một yêu cầu hoàn tiền (nếu có)
+     */
+    public function refundRequest(): \Illuminate\Database\Eloquent\Relations\HasOne
+    {
+        return $this->hasOne(RefundRequest::class);
+    }
 }
