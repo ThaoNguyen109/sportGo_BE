@@ -4,8 +4,7 @@ namespace App\Services;
 
 use App\Contracts\CourtRepositoryInterface;
 use Exception;
-use Illuminate\Support\Facades\DB;
-use App\Models\Court;
+use App\Services\BookingService;
 
 /**
  * CourtService
@@ -56,9 +55,10 @@ class CourtService
      * 
      * @param CourtRepositoryInterface $courtRepository Data access layer
      */
-    public function __construct(CourtRepositoryInterface $courtRepository)
+    public function __construct(CourtRepositoryInterface $courtRepository,Private BookingService $bookingService)
     {
         $this->courtRepository = $courtRepository;
+        $this->bookingService = $bookingService;
     }
 
     /**
@@ -96,6 +96,212 @@ class CourtService
 
         // Format response (SOLID: Data transformation is business logic)
         return $this->formatCourtData($court);
+    }
+
+    /**
+     * Get all courts
+     *
+     * SOLID: Single Responsibility - handles listing all courts
+     *
+     * @param array $filters  Có thể chứa: lat, lng, max_distance
+     * @return array List of courts formatted for API response
+     */
+    public function getAllCourts(array $filters = []): array
+    {
+        $lat       = isset($filters['lat'])          ? (float) $filters['lat']          : null;
+        $lng       = isset($filters['lng'])          ? (float) $filters['lng']          : null;
+        $maxKm     = isset($filters['max_distance']) ? (float) $filters['max_distance'] : null;
+
+        // Nếu có tọa độ người dùng → dùng query Haversine kèm khoảng cách
+        if ($lat !== null && $lng !== null) {
+            $courts = $this->courtRepository->getAllWithDistance($lat, $lng, $maxKm);
+
+            return $courts->map(function ($court) use ($lat, $lng) {
+                $item                 = $this->formatCourtListItem($court);
+                $item['distance_km']  = $court->distance_km !== null
+                                        ? round((float) $court->distance_km, 1)
+                                        : null;
+                return $item;
+            })->values()->all();
+        }
+
+        // Không có tọa độ → trả danh sách thường, không có distance
+        $courts = $this->courtRepository->getAll();
+
+        return $courts->map(function ($court) {
+            $item                = $this->formatCourtListItem($court);
+            $item['distance_km'] = null;
+            return $item;
+        })->values()->all();
+    }
+
+    /**
+     * Tính khoảng cách giữa 2 tọa độ (Haversine — PHP)
+     * Dùng cho GET /courts/{id} đơn lẻ thay vì cần query DB.
+     *
+     * @param float $lat1  Vĩ độ điểm A
+     * @param float $lng1  Kinh độ điểm A
+     * @param float $lat2  Vĩ độ điểm B
+     * @param float $lng2  Kinh độ điểm B
+     * @return float khoảng cách (km), làm tròn 1 chữ số thập phân
+     */
+    public function calculateDistance(float $lat1, float $lng1, float $lat2, float $lng2): float
+    {
+        $earthRadius = 6371; // km
+
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLng = deg2rad($lng2 - $lng1);
+
+        $a = sin($dLat / 2) * sin($dLat / 2)
+           + cos(deg2rad($lat1)) * cos(deg2rad($lat2))
+           * sin($dLng / 2) * sin($dLng / 2);
+
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+
+        return round($earthRadius * $c, 1);
+    }
+
+    /**
+     * Format a single court item for the list view
+     *
+     * Lighter format than formatCourtData() — omits heavy nested data
+     * to keep the list response lean and fast.
+     *
+     * @param object $court Court model instance
+     * @return array
+     */
+    private function formatCourtListItem(object $court): array
+    {
+        return [
+            'id'          => $court->id,
+            'name'        => $court->name,
+            'address'     => $court->address,
+            'phone'       => $court->phone,
+            'status'      => $court->status,
+            'open_time'   => $court->open_time,
+            'close_time'  => $court->close_time,
+            'image'       => $court->image,
+            'fields_count'=> $court->fields->count(),
+            'owner'       => [
+                'id'    => $court->owner?->id,
+                'name'  => $court->owner?->name,
+                'email' => $court->owner?->email,
+            ],
+            'created_at'  => $court->created_at,
+        ];
+    }
+
+    /**
+     * Get field prices for a court
+     *
+     * SOLID: Single Responsibility - handles field pricing business logic
+     * This Service layer adds:
+     * 1. Court existence validation
+     * 2. Could add permission checks (future)
+     * 3. Data formatting for API
+     * 4. Could add caching (future)
+     *
+     * Future enhancements:
+     * - Add permission check: can user view prices?
+     * - Add availability check: show available time slots
+     * - Add dynamic pricing: different prices for peak hours
+     * - Add discount logic: member discounts, bulk booking
+     *
+     * @param int $courtId Court ID
+     * @return array Formatted field prices data
+     * @throws Exception If court not found
+     */
+    public function getFieldPrices(int $courtId): array
+    {
+        // Business rule: Validate court exists and is accessible
+        $court = $this->courtRepository->findById($courtId);
+        if (!$court) {
+            throw new Exception("Sân vận động không tồn tại", 404);
+        }
+
+        // Business rule: Could add permission check here
+        // Example: if court is private, only owner can view prices
+
+        // Get field prices from repository
+        $fieldsWithPrices = $this->courtRepository->getFieldPrices($courtId);
+
+        // Format response (SOLID: Data transformation is business logic)
+        return $this->formatFieldPricesData($fieldsWithPrices, $court);
+    }
+
+    /**
+     * Format field prices data for API response
+     *
+     * SOLID: Single Responsibility - handles data formatting
+     * Pattern: Data Transformer/Presenter
+     * Reason: Centralize API response structure
+     *
+     * @param Collection $fieldsWithPrices Fields with their prices
+     * @param object $court Court data
+     * @return array Formatted field prices data
+     */
+    private function formatFieldPricesData($fieldsWithPrices, $court): array
+    {
+        return [
+            'court' => [
+                'id'      => $court->id,
+                'name'    => $court->name,
+                'address' => $court->address,
+            ],
+            'fields' => $fieldsWithPrices->map(function ($field) {
+                // Group các khung giờ theo từng ngày trong tuần
+                $byDay = $field->prices
+                    ->groupBy('day_of_week')
+                    ->map(function ($slots, $dayOfWeek) {
+                        return [
+                            'day_of_week' => (int) $dayOfWeek,
+                            'day_name'    => $this->getDayName((int) $dayOfWeek),
+                            'slots'       => $slots->map(function ($price) {
+                                return [
+                                    'id'         => $price->id,
+                                    'start_time' => substr($price->start_time, 0, 5), // "08:00:00" → "08:00"
+                                    'end_time'   => substr($price->end_time, 0, 5),
+                                    'price'      => (float) $price->price,
+                                    'is_active'  => (bool) $price->is_active,
+                                ];
+                            })->values(),
+                        ];
+                    })
+                    ->sortKeys()   // sắp xếp theo thứ (1→7)
+                    ->values();
+
+                return [
+                    'id'       => $field->id,
+                    'name'     => $field->name,
+                    'schedule' => $byDay,  // mỗi phần tử = 1 ngày, có danh sách slot+giá
+                ];
+            })->values(),
+        ];
+    }
+
+    /**
+     * Get day name from day of week number
+     *
+     * Pattern: Helper method
+     * Reason: Convert numeric day to readable name
+     * SOLID: Single Responsibility - utility function
+     *
+     * @param int $dayOfWeek 1=Monday, 7=Sunday
+     * @return string Day name in Vietnamese
+     */
+    private function getDayName(int $dayOfWeek): string
+    {
+        $days = [
+            1 => 'Thứ Hai',
+            2 => 'Thứ Ba',
+            3 => 'Thứ Tư',
+            4 => 'Thứ Năm',
+            5 => 'Thứ Sáu',
+            6 => 'Thứ Bảy',
+            7 => 'Chủ Nhật',
+        ];
+
+        return $days[$dayOfWeek] ?? 'Không xác định';
     }
 
     /**
@@ -153,114 +359,44 @@ class CourtService
             'updated_at' => $court->updated_at,
         ];
     }
-    public function createCourt($ownerId, array $data)
+
+    /**
+     * Lấy toàn bộ slot của tất cả field trong một court vào một ngày,
+     * kèm trạng thái để frontend tô màu.
+     *
+     * @param int    $courtId
+     * @param string $date
+     * @return array
+     * @throws Exception
+     */
+    public function getSlotsByCourt(int $courtId, string $date): array
     {
-        return DB::transaction(function () use ($ownerId, $data) {
-
-            $court = $this->createCourtBase($ownerId, $data);
-
-            $this->createImages($court, $data['images'] ?? []);
-            $this->createFields($court, $data['fields'] ?? []);
-
-            return $court->load('fields.prices', 'images');
-        });
-    }
-
-    private function createCourtBase($ownerId, $data)
-    {
-        return Court::create([
-            'owner_id' => $ownerId,
-            'name' => $data['name'],
-            'address' => $data['address'],
-            'latitude' => $data['latitude'] ?? null,
-            'longitude' => $data['longitude'] ?? null,
-            'phone' => $data['phone'] ?? null,
-            'image' => $data['image'] ?? null,
-            'description' => $data['description'] ?? null,
-            'open_time' => $data['open_time'],
-            'close_time' => $data['close_time'],
-            'status' => 'pending',
-            'is_active' => true
-        ]);
-    }
-
-    private function createImages($court, $images)
-    {
-        foreach ($images as $img) {
-            $court->images()->create([
-                'image_url' => $img
-            ]);
-        }
-    }
-
-    private function createFields($court, $fields)
-    {
-        if (empty($fields)) {
-            throw new Exception("Phải có ít nhất 1 sân con");
+        $court = $this->courtRepository->findById($courtId);
+        if (!$court) {
+            throw new Exception('Sân không tồn tại.', 404);
         }
 
-        foreach ($fields as $fieldData) {
-
-            $this->validatePrices($fieldData['prices']);
-
-            $field = $court->fields()->create([
-                'name' => $fieldData['name'],
-                'is_active' => true
-            ]);
-
-            foreach ($fieldData['prices'] as $price) {
-                $field->prices()->create($price);
-            }
+        $fields = $this->courtRepository->getActiveFields($courtId);
+        if ($fields->isEmpty()) {
+            throw new Exception('Sân không có field nào đang hoạt động.', 404);
         }
-    }
 
-    private function validatePrices($prices)
-    {
-        foreach ($prices as $i => $p1) {
+        $result = [];
+        foreach ($fields as $field) {
+            $slots = $this->bookingService->getAllSlotsWithStatus($field->id, $date);
 
-            if ($p1['start_time'] >= $p1['end_time']) {
-                throw new Exception("Giờ không hợp lệ");
-            }
-
-            foreach ($prices as $j => $p2) {
-                if ($i == $j) continue;
-
-                if (
-                    $p1['start_time'] < $p2['end_time'] &&
-                    $p1['end_time'] > $p2['start_time']
-                ) {
-                    throw new Exception("Khung giờ bị trùng");
-                }
-            }
+            $result[] = [
+                'field_id'   => $field->id,
+                'field_name' => $field->name,
+                'slots'      => $slots,
+            ];
         }
-    }
-// --- FIELD ---
-    public function addField($ownerId, $courtId, array $data)
-    {
-        return DB::transaction(function () use ($ownerId, $courtId, $data) {
 
-            $court = Court::findOrFail($courtId);
-
-            // 🔐 check quyền
-            if ($court->owner_id != $ownerId) {
-                throw new Exception("Không có quyền thêm sân vào court này");
-            }
-
-            // validate giá
-            $this->validatePrices($data['prices']);
-
-            // tạo field
-            $field = $court->fields()->create([
-                'name' => $data['name'],
-                'is_active' => true
-            ]);
-
-            // tạo price
-            foreach ($data['prices'] as $price) {
-                $field->prices()->create($price);
-            }
-
-            return $field->load('prices');
-        });
+        return [
+            'court_id'   => $court->id,
+            'court_name' => $court->name,
+            'date'       => $date,
+            'fields'     => $result,
+        ];
     }
 }
