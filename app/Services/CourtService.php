@@ -2,9 +2,21 @@
 
 namespace App\Services;
 
+    
+use Symfony\Component\HttpKernel\Exception\HttpException;
+use Illuminate\Database\QueryException;
+
 use App\Contracts\CourtRepositoryInterface;
 use Exception;
+use Illuminate\Support\Facades\DB;
+use App\Models\Court;
+use App\Models\Field;
+use Illuminate\Validation\ValidationException;
+use App\Services\FieldService;
+use App\Services\CourtImageService;
+use App\Services\FieldPriceService;
 use App\Services\BookingService;
+use App\Events\CourtCreatedEvent;
 
 /**
  * CourtService
@@ -43,6 +55,10 @@ class CourtService
      * This is DEPENDENCY INVERSION principle
      */
     private CourtRepositoryInterface $courtRepository;
+    private FieldService $fieldService;
+    private CourtImageService $imageService;
+    private FieldPriceService $fieldPriceService;
+    private BookingService $bookingService;
 
     /**
      * Constructor with Dependency Injection
@@ -55,9 +71,17 @@ class CourtService
      * 
      * @param CourtRepositoryInterface $courtRepository Data access layer
      */
-    public function __construct(CourtRepositoryInterface $courtRepository,Private BookingService $bookingService)
-    {
+    public function __construct(
+        CourtRepositoryInterface $courtRepository,
+        FieldService $fieldService,
+        CourtImageService $imageService,
+        FieldPriceService $fieldPriceService,
+        BookingService $bookingService
+    ) {
         $this->courtRepository = $courtRepository;
+        $this->fieldService = $fieldService;
+        $this->imageService = $imageService;
+        $this->fieldPriceService = $fieldPriceService;
         $this->bookingService = $bookingService;
     }
 

@@ -21,16 +21,20 @@ class BookingDetail extends Model
 
     protected $casts = [
         'booking_date' => 'date',
-        'price'        => 'decimal:2',
+        'price' => 'decimal:2',
     ];
 
-    // Một detail thuộc về một booking
+    /**
+     * Thuộc booking nào
+     */
     public function booking(): BelongsTo
     {
         return $this->belongsTo(Booking::class);
     }
 
-    // Một detail thuộc về một field (sân con)
+    /**
+     * Thuộc sân con nào
+     */
     public function field(): BelongsTo
     {
         return $this->belongsTo(Field::class);

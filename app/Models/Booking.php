@@ -4,8 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Booking extends Model
 {
@@ -16,29 +17,45 @@ class Booking extends Model
         'total_price',
         'payment_method',
         'status',
+        'cancel_reason',
+        'cancelled_by',
     ];
 
-    protected $casts = [
-        'total_price' => 'decimal:2',
-    ];
-
-    // Một booking thuộc về một user
+    /**
+     * Người đặt sân
+     */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    // Một booking có nhiều booking_details (nhiều slot)
+    /**
+     * Danh sách sân đã đặt
+     */
     public function details(): HasMany
     {
         return $this->hasMany(BookingDetail::class);
     }
 
     /**
-     * Một booking có một yêu cầu hoàn tiền (nếu có)
+     * Yêu cầu hoàn tiền liên quan đến Booking này
      */
-    public function refundRequest(): \Illuminate\Database\Eloquent\Relations\HasOne
+    public function refundRequest(): HasOne
     {
         return $this->hasOne(RefundRequest::class);
     }
+
+    /*
+    |--------------------------------------------------------------------------
+    | Payout
+    |--------------------------------------------------------------------------
+    */
+    public function payout(): BelongsTo
+    {
+        return $this->belongsTo(
+            OwnerPayout::class,
+            'payout_id'
+        );
+    }
+
 }

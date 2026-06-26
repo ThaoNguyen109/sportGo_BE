@@ -44,9 +44,6 @@ class FieldPrice extends Model
 
     /**
      * Get the field this price belongs to
-     *
-     * Pattern: Inverse Relationship
-     * SOLID: Single Responsibility - Model manages relationships
      */
     public function field(): BelongsTo
     {
@@ -55,22 +52,21 @@ class FieldPrice extends Model
 
     /**
      * Get the court through field relationship
-     *
-     * Pattern: Has-One-Through Relationship
-     * Reason: Access court data from price (FieldPrice -> Field -> Court)
-     * SOLID: Single Responsibility
      */
-    public function court(): BelongsTo
+    public function court()
     {
-        return $this->hasOneThrough(Court::class, Field::class, 'id', 'id', 'field_id', 'court_id');
+        return $this->hasOneThrough(
+            Court::class,
+            Field::class,
+            'id',
+            'id',
+            'field_id',
+            'court_id'
+        );
     }
 
     /**
      * Scope for active prices only
-     *
-     * Pattern: Query Scope Pattern
-     * Reason: Common filter for active pricing
-     * SOLID: Single Responsibility
      */
     public function scopeActive($query)
     {
@@ -79,10 +75,6 @@ class FieldPrice extends Model
 
     /**
      * Scope for specific day of week
-     *
-     * Pattern: Query Scope Pattern
-     * Reason: Filter prices by day
-     * SOLID: Single Responsibility
      */
     public function scopeForDay($query, int $dayOfWeek)
     {
@@ -91,14 +83,10 @@ class FieldPrice extends Model
 
     /**
      * Scope for time range
-     *
-     * Pattern: Query Scope Pattern
-     * Reason: Filter prices by time slot
-     * SOLID: Single Responsibility
      */
     public function scopeForTimeRange($query, string $startTime, string $endTime)
     {
         return $query->where('start_time', '<=', $startTime)
-                    ->where('end_time', '>=', $endTime);
+                     ->where('end_time', '>=', $endTime);
     }
 }

@@ -15,17 +15,16 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-<<<<<<< HEAD
-        // User::factory(10)->create();
-
+        // Create a deterministic test user
         User::factory()->create([
             'name' => 'Test User',
             'email' => 'test@example.com',
-=======
-        // Create test users
+        ]);
+
+        // Create additional random users
         User::factory(5)->create();
 
-        // Call all seeders
+        // Call other seeders (if present)
         $this->call([
             CourtSeeder::class,
             CourtImageSeeder::class,
@@ -34,7 +33,6 @@ class DatabaseSeeder extends Seeder
             BookingSeeder::class,
             BookingDetailSeeder::class,
             NotificationSeeder::class,
->>>>>>> origin/main
         ]);
     }
 }
