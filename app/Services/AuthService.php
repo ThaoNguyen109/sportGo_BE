@@ -27,27 +27,6 @@ class AuthService
     }
 
     public function login($email, $password)
-    {
-        $credentials = [
-            'email' => $email,
-            'password' => $password
-        ];
-
-        // JWT login
-        if (!$token = auth('api')->attempt($credentials)) {
-            return null;
-        }
-
-        return [
-            'user' => auth('api')->user(),
-
-        return [
-            'user' => $user,
-            'token' => $token
-        ];
-    }
-
-    public function login($email, $password)
 {
     $user = User::where('email', $email)->first();
 
