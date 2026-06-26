@@ -12,9 +12,11 @@ class FieldPrice extends Model
     public $timestamps = false;
 
     protected $fillable = [
-        'field_id',
-        'start_time',
-        'end_time',
-        'price'
-    ];
+    'field_id',
+    'start_time',
+    'end_time',
+    'price',
+    'day_of_week',
+    'is_active'
+];
 }

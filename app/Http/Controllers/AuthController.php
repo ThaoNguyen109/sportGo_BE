@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Services\AuthService;
+use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
 {
@@ -14,20 +15,30 @@ class AuthController extends Controller
         $this->authService = $authService;
     }
 
+
     public function register(Request $request)
     {
-        $request->validate([
+        $validator = Validator::make($request->all(), [
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
             'phone' => 'nullable|string|max:20|unique:users,phone',
             'password' => 'required|string|min:6|confirmed',
+            'role' => 'nullable|in:user,owner',
         ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validate lỗi',
+                'errors' => $validator->errors()
+            ], 422);
+        }
 
         $result = $this->authService->register($request->only([
             'name',
             'email',
             'phone',
-            'password'
+            'password',
+            'role'
         ]));
 
         return response()->json([
@@ -37,25 +48,35 @@ class AuthController extends Controller
     }
 
     public function login(Request $request)
-    {
-        $request->validate([
-            'email' => 'required|email',
-            'password' => 'required'
-        ]);
+{
+    $validator = Validator::make($request->all(), [
+        'email' => 'required|email',
+        'password' => 'required'
+    ]);
 
-        $result = $this->authService->login(
-            $request->email,
-            $request->password
-        );
-
-        if (!$result) {
-            return response()->json([
-                'message' => 'Sai tài khoản hoặc mật khẩu'
-            ], 401);
-        }
-
-        return response()->json($result);
+    if ($validator->fails()) {
+        return response()->json([
+            'message' => 'Validate lỗi',
+            'errors' => $validator->errors()
+        ], 422);
     }
+
+    $result = $this->authService->login(
+        $request->email,
+        $request->password
+    );
+
+    if (!$result['success']) {
+        return response()->json([
+            'message' => $result['message']
+        ], $result['status']);
+    }
+
+    return response()->json([
+        'user' => $result['user'],
+        'token' => $result['token']
+    ], 200);
+}
 
     public function me()
     {

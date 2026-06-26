@@ -13,7 +13,7 @@ class AuthService
             'email' => $data['email'],
             'phone' => $data['phone'] ?? null,
             'password' => $data['password'],
-            'role' => 'user',
+            'role' => $data['role'] ?? 'user',
             'status' => true,
             'avatar' => null,
         ]);
@@ -27,20 +27,45 @@ class AuthService
     }
 
     public function login($email, $password)
-    {
-        $credentials = [
-            'email' => $email,
-            'password' => $password
-        ];
+{
+    $user = User::where('email', $email)->first();
 
-        // JWT login
-        if (!$token = auth('api')->attempt($credentials)) {
-            return null;
-        }
-
+    // không tồn tại email
+    if (!$user) {
         return [
-            'user' => auth('api')->user(),
-            'token' => $token
+            'success' => false,
+            'status' => 401,
+            'message' => 'Sai tài khoản hoặc mật khẩu'
         ];
     }
+
+    // tài khoản bị khóa
+    if (!$user->status) {
+        return [
+            'success' => false,
+            'status' => 403,
+            'message' => 'Tài khoản đã bị khóa'
+        ];
+    }
+
+    $credentials = [
+        'email' => $email,
+        'password' => $password
+    ];
+
+    if (!$token = auth('api')->attempt($credentials)) {
+        return [
+            'success' => false,
+            'status' => 401,
+            'message' => 'Sai tài khoản hoặc mật khẩu'
+        ];
+    }
+
+    return [
+        'success' => true,
+        'status' => 200,
+        'user' => auth('api')->user(),
+        'token' => $token
+    ];
+}
 }

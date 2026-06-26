@@ -55,4 +55,15 @@ class User extends Authenticatable implements JWTSubject
     {
         return $this->hasMany(Court::class, 'owner_id');
     }
+
+    /**
+     * Tài khoản ngân hàng của owner
+     */
+    public function bankAccount()
+{
+    return $this->hasOne(
+        OwnerBankAccount::class,
+        'owner_id'
+    );
+}
 }
