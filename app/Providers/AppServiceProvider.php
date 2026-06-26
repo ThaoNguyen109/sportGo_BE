@@ -7,6 +7,10 @@ use App\Repositories\CourtRepository;
 use Illuminate\Support\ServiceProvider;
 use App\Strategies\Payout\PayoutStrategy;
 use App\Strategies\Payout\FixedCommissionStrategy;
+use App\Contracts\BookingRepositoryInterface;
+use App\Repositories\BookingRepository;
+use App\Contracts\PaymentRepositoryInterface;
+use App\Repositories\PaymentRepository;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -26,6 +30,12 @@ class AppServiceProvider extends ServiceProvider
 
             FixedCommissionStrategy::class
         );
+
+        $this->app->bind(
+            BookingRepositoryInterface::class,
+            BookingRepository::class
+        );
+        $this->app->bind(PaymentRepositoryInterface::class, PaymentRepository::class);
     }
 
     /**

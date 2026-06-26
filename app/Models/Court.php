@@ -35,7 +35,11 @@ class Court extends Model
     }
 
     /**
-     * Danh sách sân con
+     * Get all fields (playing areas) of this court
+     *
+     * Pattern: Relationship Pattern
+     * Reason: Structure hierarchical data (Court -> Fields -> BookingDetails)
+     * SOLID: Single Responsibility
      */
     public function fields(): HasMany
     {
@@ -43,10 +47,26 @@ class Court extends Model
     }
 
     /**
-     * Danh sách ảnh
+     * Get all images of this court
+     *
+     * Pattern: Relationship Pattern
+     * Reason: One court can have multiple images
+     * SOLID: Single Responsibility
      */
     public function images(): HasMany
     {
         return $this->hasMany(CourtImage::class);
+    }
+
+    /**
+     * Get active fields only
+     *
+     * Pattern: Query Scope Pattern
+     * Reason: Common filter for active fields
+     * SOLID: Single Responsibility - Model handles data filtering
+     */
+    public function activeFields(): HasMany
+    {
+        return $this->fields()->where('is_active', true);
     }
 }

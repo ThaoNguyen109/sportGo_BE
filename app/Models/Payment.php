@@ -6,37 +6,31 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class BookingDetail extends Model
+class Payment extends Model
 {
     use HasFactory;
 
     protected $fillable = [
         'booking_id',
-        'field_id',
-        'booking_date',
-        'start_time',
-        'end_time',
-        'price',
+        'order_id',
+        'transaction_id',
+        'request_id',
+        'amount',
+        'payment_method',
+        'status',
+        'raw_response',
+        'paid_at',
     ];
 
     protected $casts = [
-        'booking_date' => 'date',
-        'price' => 'decimal:2',
+        'amount'   => 'decimal:2',
+        'paid_at'  => 'datetime',
+        'raw_response' => 'array', // tự động json_encode/decode
     ];
 
-    /**
-     * Thuộc booking nào
-     */
+    // Một payment thuộc về một booking
     public function booking(): BelongsTo
     {
         return $this->belongsTo(Booking::class);
-    }
-
-    /**
-     * Thuộc sân con nào
-     */
-    public function field(): BelongsTo
-    {
-        return $this->belongsTo(Field::class);
     }
 }

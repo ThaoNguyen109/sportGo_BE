@@ -13,11 +13,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-         $middleware->redirectGuestsTo(function () {
-            return null; // ❌ không redirect nữa
-        });
-        $middleware->alias([
-            'role' => \App\Http\Middleware\RoleMiddleware::class,
+        // Tắt CSRF cho IPN webhook của MoMo
+        // Vì MoMo gọi callback không kèm CSRF token
+        $middleware->validateCsrfTokens(except: [
+            'api/payments/momo/ipn',
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -27,3 +26,4 @@ return Application::configure(basePath: dirname(__DIR__))
         ], 401);
     });
     })->create();
+

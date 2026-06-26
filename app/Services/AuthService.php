@@ -27,45 +27,61 @@ class AuthService
     }
 
     public function login($email, $password)
-{
-    $user = User::where('email', $email)->first();
+    {
+        $user = User::where('email', $email)->first();
 
-    // không tồn tại email
-    if (!$user) {
+        // Không tồn tại email
+        if (!$user) {
+            return [
+                'success' => false,
+                'status' => 401,
+                'message' => 'Sai tài khoản hoặc mật khẩu'
+            ];
+        }
+
+        // Tài khoản bị khóa
+        if (!$user->status) {
+            return [
+                'success' => false,
+                'status' => 403,
+                'message' => 'Tài khoản đã bị khóa'
+            ];
+        }
+
+        $credentials = [
+            'email' => $email,
+            'password' => $password
+        ];
+
+        if (!$token = auth('api')->attempt($credentials)) {
+            return [
+                'success' => false,
+                'status' => 401,
+                'message' => 'Sai tài khoản hoặc mật khẩu'
+            ];
+        }
+
         return [
-            'success' => false,
-            'status' => 401,
-            'message' => 'Sai tài khoản hoặc mật khẩu'
+            'success' => true,
+            'status' => 200,
+            'user' => auth('api')->user(),
+            'token' => $token
         ];
     }
 
-    // tài khoản bị khóa
-    if (!$user->status) {
-        return [
-            'success' => false,
-            'status' => 403,
-            'message' => 'Tài khoản đã bị khóa'
-        ];
+    /**
+     * Đăng xuất người dùng (thu hồi token JWT hiện tại)
+     */
+    public function logout()
+    {
+        auth('api')->logout();
     }
 
-    $credentials = [
-        'email' => $email,
-        'password' => $password
-    ];
-
-    if (!$token = auth('api')->attempt($credentials)) {
-        return [
-            'success' => false,
-            'status' => 401,
-            'message' => 'Sai tài khoản hoặc mật khẩu'
-        ];
+    /**
+     * Làm mới token JWT
+     */
+    public function refresh()
+    {
+        return auth('api')->refresh();
     }
-
-    return [
-        'success' => true,
-        'status' => 200,
-        'user' => auth('api')->user(),
-        'token' => $token
-    ];
-}
 }

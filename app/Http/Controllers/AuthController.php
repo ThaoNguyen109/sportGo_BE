@@ -15,7 +15,6 @@ class AuthController extends Controller
         $this->authService = $authService;
     }
 
-
     public function register(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -48,40 +47,64 @@ class AuthController extends Controller
     }
 
     public function login(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'email' => 'required|email',
-        'password' => 'required'
-    ]);
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+            'password' => 'required'
+        ]);
 
-    if ($validator->fails()) {
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validate lỗi',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $result = $this->authService->login(
+            $request->email,
+            $request->password
+        );
+
+        if (!$result['success']) {
+            return response()->json([
+                'message' => $result['message']
+            ], $result['status']);
+        }
+
         return response()->json([
-            'message' => 'Validate lỗi',
-            'errors' => $validator->errors()
-        ], 422);
+            'user' => $result['user'],
+            'token' => $result['token']
+        ], 200);
     }
-
-    $result = $this->authService->login(
-        $request->email,
-        $request->password
-    );
-
-    if (!$result['success']) {
-        return response()->json([
-            'message' => $result['message']
-        ], $result['status']);
-    }
-
-    return response()->json([
-        'user' => $result['user'],
-        'token' => $result['token']
-    ], 200);
-}
 
     public function me()
     {
         return response()->json([
             'user' => auth('api')->user()
         ]);
+    }
+
+    public function logout()
+    {
+        $this->authService->logout();
+
+        return response()->json([
+            'message' => 'Đăng xuất thành công'
+        ], 200);
+    }
+
+    public function refresh()
+    {
+        try {
+            $newToken = $this->authService->refresh();
+
+            return response()->json([
+                'token' => $newToken
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Không thể làm mới token'
+            ], 401);
+        }
     }
 }
