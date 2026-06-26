@@ -4,7 +4,6 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Services\AuthService;
-use App\Models\User;
 use Illuminate\Support\Facades\Validator;
 
 class AuthController extends Controller
@@ -15,51 +14,6 @@ class AuthController extends Controller
     {
         $this->authService = $authService;
     }
-
-    public function register(Request $request)
-    {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email',
-            'phone' => 'nullable|string|max:20|unique:users,phone',
-            'password' => 'required|string|min:6|confirmed',
-        ]);
-
-        $result = $this->authService->register($request->only([
-            'name',
-            'email',
-            'phone',
-            'password'
-        ]));
-
-        return response()->json([
-            'message' => 'Đăng ký thành công',
-            'data' => $result
-        ], 201);
-    }
-
-    public function login(Request $request)
-    {
-        $request->validate([
-            'email' => 'required|email',
-            'password' => 'required'
-        ]);
-
-        $result = $this->authService->login(
-            $request->email,
-            $request->password
-        );
-
-        if (!$result) {
-            return response()->json([
-                'message' => 'Sai tài khoản hoặc mật khẩu'
-            ], 401);
-        }
-
-        return response()->json($result);
-    }
-
-    public function fakeLogin(Request $request)
 
     public function register(Request $request)
     {
@@ -93,35 +47,35 @@ class AuthController extends Controller
     }
 
     public function login(Request $request)
-{
-    $validator = Validator::make($request->all(), [
-        'email' => 'required|email',
-        'password' => 'required'
-    ]);
+    {
+        $validator = Validator::make($request->all(), [
+            'email' => 'required|email',
+            'password' => 'required'
+        ]);
 
-    if ($validator->fails()) {
+        if ($validator->fails()) {
+            return response()->json([
+                'message' => 'Validate lỗi',
+                'errors' => $validator->errors()
+            ], 422);
+        }
+
+        $result = $this->authService->login(
+            $request->email,
+            $request->password
+        );
+
+        if (!$result['success']) {
+            return response()->json([
+                'message' => $result['message']
+            ], $result['status']);
+        }
+
         return response()->json([
-            'message' => 'Validate lỗi',
-            'errors' => $validator->errors()
-        ], 422);
+            'user' => $result['user'],
+            'token' => $result['token']
+        ], 200);
     }
-
-    $result = $this->authService->login(
-        $request->email,
-        $request->password
-    );
-
-    if (!$result['success']) {
-        return response()->json([
-            'message' => $result['message']
-        ], $result['status']);
-    }
-
-    return response()->json([
-        'user' => $result['user'],
-        'token' => $result['token']
-    ], 200);
-}
 
     public function me()
     {
@@ -130,24 +84,20 @@ class AuthController extends Controller
         ]);
     }
 
-    /**
-     * Đăng xuất người dùng (thu hồi token JWT)
-     */
     public function logout()
     {
         $this->authService->logout();
+
         return response()->json([
             'message' => 'Đăng xuất thành công'
         ], 200);
     }
 
-    /**
-     * Làm mới token JWT
-     */
     public function refresh()
     {
         try {
             $newToken = $this->authService->refresh();
+
             return response()->json([
                 'token' => $newToken
             ], 200);
