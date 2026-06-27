@@ -13,6 +13,8 @@ use App\Http\Controllers\AdminPayoutController;
 use App\Http\Controllers\OwnerPayoutController;
 use App\Http\Controllers\OwnerBankAccountController;
 use App\Http\Controllers\AdminOwnerBankAccountController;
+use App\Http\Controllers\OwnerFieldController;
+use App\Http\Controllers\AdminRefundRequestController;
 use App\Http\Controllers\NotificationController;
 use App\Events\NewNotificationEvent;
 use Illuminate\Support\Facades\Route;
@@ -94,7 +96,7 @@ Route::middleware('auth:api')->prefix('admin')->group(function () {
     Route::get('/bookings',[AdminBookingController::class, 'getAllBookings']);
     Route::get('/bookings/stats', [AdminBookingController::class, 'getBookingStats']);
     Route::get('/bookings/{id}', [AdminBookingController::class, 'getBookingDetail'])->whereNumber('id');
-    Route::patch('/bookings/{id}/refund',[AdminBookingController::class, 'refundBooking']);
+    Route::post('/bookings/{id}/refund',[AdminBookingController::class, 'refundBooking']);
     Route::get('/bookings/revenue', [AdminBookingController::class, 'getRevenue']);
     Route::get('/users', [AdminUserController::class, 'getAllUsers']);
     Route::get('/payouts/pending-owners', [AdminPayoutController::class, 'getAllOwnersPendingPayout']);
@@ -104,6 +106,8 @@ Route::middleware('auth:api')->prefix('admin')->group(function () {
     Route::post('/payouts/{id}/pay', [AdminPayoutController::class, 'payPayout'])->whereNumber('id');
     Route::get('/payouts/{id}',[AdminPayoutController::class, 'getPayoutDetail'])->whereNumber('id');
     Route::get('/owners/{ownerId}/bank-account', [AdminOwnerBankAccountController::class, 'getOwnerBankAccount'])->whereNumber('ownerId');
+    Route::get('/bookings/{bookingId}/refund-detail',[AdminRefundRequestController::class, 'getRefundByBooking']
+);
 });
 
 // ─── Notifications

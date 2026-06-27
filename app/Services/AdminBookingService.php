@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Carbon\Carbon;
 use App\Models\BookingDetail;
+use App\Events\RefundCompletedEvent;
 
 class AdminBookingService
 {
@@ -212,6 +213,11 @@ public function refundBooking(
 
             'status' => 'refunded'
         ]);
+        event(new RefundCompletedEvent(
+            $booking->id,
+            $booking->user_id,
+            $booking->total_price
+        ));
 
         return $booking;
     });

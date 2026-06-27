@@ -36,6 +36,9 @@ class EventServiceProvider extends ServiceProvider
             SendUserBookingCancelledListener::class,
             SendAdminBookingCancelledListener::class
         ],
+        RefundCompletedEvent::class => [
+            SendRefundNotificationListener::class,
+        ],
     ];
     /**
      * Register any events for your application.
