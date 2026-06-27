@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Booking extends Model
 {
@@ -34,6 +35,14 @@ class Booking extends Model
     public function details(): HasMany
     {
         return $this->hasMany(BookingDetail::class);
+    }
+
+    /**
+     * Yêu cầu hoàn tiền liên quan đến Booking này
+     */
+    public function refundRequest(): HasOne
+    {
+        return $this->hasOne(RefundRequest::class);
     }
 
     /*

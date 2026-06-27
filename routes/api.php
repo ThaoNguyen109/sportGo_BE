@@ -56,6 +56,9 @@ Route::prefix('courts')->group(function () {
     Route::get('/{id}/slots',    [CourtController::class, 'getSlots']);
 });
 
+// Trạng thái slot (công khai)
+Route::get('/slots/status', [BookingController::class, 'checkSlotStatus']);
+
 // ─── Owner - quản lý sân
 Route::middleware('auth:api')->prefix('owner')->group(function () {
     Route::post('/courts', [OwnerCourtController::class, 'createCourt']);

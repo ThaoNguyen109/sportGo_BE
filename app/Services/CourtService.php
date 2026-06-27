@@ -13,7 +13,7 @@ use App\Models\Court;
 use App\Models\Field;
 use Illuminate\Validation\ValidationException;
 use App\Services\FieldService;
-use App\Services\ImageService;
+use App\Services\CourtImageService;
 use App\Services\FieldPriceService;
 use App\Services\BookingService;
 use App\Events\CourtCreatedEvent;
@@ -56,7 +56,7 @@ class CourtService
      */
     private CourtRepositoryInterface $courtRepository;
     private FieldService $fieldService;
-    private ImageService $imageService;
+    private CourtImageService $imageService;
     private FieldPriceService $fieldPriceService;
     private BookingService $bookingService;
 
@@ -74,7 +74,7 @@ class CourtService
     public function __construct(
         CourtRepositoryInterface $courtRepository,
         FieldService $fieldService,
-        ImageService $imageService,
+        CourtImageService $imageService,
         FieldPriceService $fieldPriceService,
         BookingService $bookingService
     ) {
