@@ -3,27 +3,36 @@
 namespace App\Services;
 
 use App\Contracts\BookingRepositoryInterface;
+use App\Contracts\PaymentGatewayInterface;
 use App\Contracts\PaymentRepositoryInterface;
-use App\Services\MomoService;
 use App\Services\SlotLockService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * PaymentService
+ *
+ * Điều phối toàn bộ luồng thanh toán: tạo giao dịch, xử lý IPN, xử lý redirect.
+ * Chỉ phụ thuộc vào PaymentGatewayInterface — không biết cụ thể gateway nào
+ * (MoMo, VNPay, ZaloPay,...). Tuân thủ Dependency Inversion Principle (SOLID-D).
+ */
 class PaymentService
 {
     public function __construct(
         private PaymentRepositoryInterface $paymentRepository,
         private BookingRepositoryInterface $bookingRepository,
-        private MomoService                $momoService,
+        private PaymentGatewayInterface    $gateway,
         private SlotLockService            $slotLockService,
     ) {}
 
     // =========================================================
-    // BƯỚC A: Tạo link thanh toán MoMo
+    // BƯỚC A: Tạo link thanh toán
     // =========================================================
 
     /**
-     * Khởi tạo thanh toán MoMo cho một booking.
+     * Khởi tạo thanh toán cho một booking.
+     * Cổng thanh toán được inject qua PaymentGatewayInterface — có thể thay đổi
+     * sang VNPay hay ZaloPay mà không cần chỉnh sửa code tại đây.
      *
      * @param int $bookingId
      * @param int $userId     Để verify ownership
@@ -45,9 +54,9 @@ class PaymentService
             throw new \Exception('Booking không ở trạng thái chờ thanh toán.', 422);
         }
 
-        // 2. Tạo orderId và requestId unique
-        $orderId   = $this->momoService->generateOrderId($bookingId);
-        $requestId = $this->momoService->generateRequestId();
+        // 2. Tạo orderId và requestId unique qua Gateway (Adapter)
+        $orderId   = $this->gateway->generateOrderId($bookingId);
+        $requestId = $this->gateway->generateRequestId();
         $amount    = (int) $booking->total_price;
         $orderInfo = "Thanh toán đặt sân SportGo - Booking #{$bookingId}";
 
@@ -57,12 +66,12 @@ class PaymentService
             'order_id'       => $orderId,
             'request_id'     => $requestId,
             'amount'         => $amount,
-            'payment_method' => 'momo',
+            'payment_method' => $this->gateway->process(), // 'momo' | 'vnpay' | 'zalopay'
             'status'         => 'pending',
         ]);
 
-        // 4. Gọi API MoMo lấy payUrl
-        $result = $this->momoService->createPayment(
+        // 4. Gọi API Gateway lấy payUrl (đa hình qua PaymentGatewayInterface)
+        $result = $this->gateway->createPayment(
             $orderId,
             $requestId,
             $amount,
@@ -73,21 +82,21 @@ class PaymentService
     }
 
     // =========================================================
-    // BƯỚC B: Xử lý IPN từ MoMo (quan trọng nhất)
+    // BƯỚC B: Xử lý IPN (server-to-server callback)
     // =========================================================
 
     /**
-     * Xử lý webhook IPN từ MoMo.
-     * MoMo gọi endpoint này ngay sau khi user thanh toán xong.
+     * Xử lý webhook IPN từ cổng thanh toán.
+     * Gọi endpoint này ngay sau khi user thanh toán xong.
      *
-     * @param array $data  Toàn bộ data MoMo POST về
+     * @param array $data  Toàn bộ data cổng thanh toán POST về
      * @return bool
      */
     public function handleIpn(array $data): bool
     {
-        // 1. Xác thực chữ ký — bắt buộc, tránh giả mạo
-        if (!$this->momoService->verifySignature($data)) {
-            Log::warning('MoMo IPN: Chữ ký không hợp lệ', $data);
+        // 1. Xác thực chữ ký — bắt buộc, tránh giả mạo (qua Adapter)
+        if (!$this->gateway->verifySignature($data)) {
+            Log::warning('Payment IPN: Chữ ký không hợp lệ', $data);
             return false;
         }
 
@@ -97,13 +106,13 @@ class PaymentService
         // 2. Tìm payment theo orderId
         $payment = $this->paymentRepository->findByOrderId($orderId);
         if (!$payment) {
-            Log::error('MoMo IPN: Không tìm thấy payment', ['orderId' => $orderId]);
+            Log::error('Payment IPN: Không tìm thấy payment', ['orderId' => $orderId]);
             return false;
         }
 
         // 3. Tránh xử lý trùng (idempotent)
         if ($payment->status !== 'pending') {
-            Log::info('MoMo IPN: Payment đã được xử lý trước đó', ['orderId' => $orderId]);
+            Log::info('Payment IPN: Payment đã được xử lý trước đó', ['orderId' => $orderId]);
             return true;
         }
 
@@ -122,8 +131,8 @@ class PaymentService
     // =========================================================
 
     /**
-     * Xử lý khi MoMo redirect user về app.
-     * Chỉ dùng để hiển thị kết quả cho user, KHÔNG cập nhật DB ở đây
+     * Xử lý khi cổng thanh toán redirect user về app.
+     * Chỉ dùng để hiển thị kết quả cho user — KHÔNG cập nhật DB ở đây
      * (vì IPN đã xử lý rồi, hoặc IPN sẽ đến sau).
      *
      * @param array $data
@@ -131,8 +140,8 @@ class PaymentService
      */
     public function handleReturn(array $data): array
     {
-        // Xác thực chữ ký
-        if (!$this->momoService->verifySignature($data)) {
+        // Xác thực chữ ký qua Adapter
+        if (!$this->gateway->verifySignature($data)) {
             return ['status' => 'invalid', 'message' => 'Chữ ký không hợp lệ.'];
         }
 
@@ -173,14 +182,14 @@ class PaymentService
             $this->bookingRepository->updateStatus(
                 $payment->booking_id,
                 'paid',
-                'momo'
+                $this->gateway->process()
             );
         });
 
         // Release Redis lock — slot giờ được bảo vệ bởi DB
         $this->releaseSlotLocks($payment);
 
-        Log::info('MoMo IPN: Thanh toán thành công', [
+        Log::info('Payment IPN: Thanh toán thành công', [
             'booking_id' => $payment->booking_id,
             'order_id'   => $payment->order_id,
             'trans_id'   => $data['transId'],
@@ -207,7 +216,7 @@ class PaymentService
         // Release Redis lock — slot mở lại cho người khác
         $this->releaseSlotLocks($payment);
 
-        Log::info('MoMo IPN: Thanh toán thất bại', [
+        Log::info('Payment IPN: Thanh toán thất bại', [
             'booking_id'  => $payment->booking_id,
             'result_code' => $data['resultCode'],
             'message'     => $data['message'],

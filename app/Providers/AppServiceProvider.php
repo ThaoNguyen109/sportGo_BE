@@ -11,6 +11,8 @@ use App\Contracts\BookingRepositoryInterface;
 use App\Repositories\BookingRepository;
 use App\Contracts\PaymentRepositoryInterface;
 use App\Repositories\PaymentRepository;
+use App\Contracts\PaymentGatewayInterface;
+use App\Factories\MomoGatewayFactory;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -36,6 +38,13 @@ class AppServiceProvider extends ServiceProvider
             BookingRepository::class
         );
         $this->app->bind(PaymentRepositoryInterface::class, PaymentRepository::class);
+
+        // ─── Payment Gateway (Factory Method Pattern) ─────────────────────────
+        // Để chuyển sang VNPay hoặc ZaloPay, chỉ cần đổi MomoGatewayFactory
+        // thành VnpayGatewayFactory hoặc ZaloPayGatewayFactory tại đây.
+        $this->app->bind(PaymentGatewayInterface::class, function () {
+            return (new MomoGatewayFactory())->getGateway();
+        });
     }
 
     /**

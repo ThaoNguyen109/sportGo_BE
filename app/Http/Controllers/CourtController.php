@@ -293,8 +293,8 @@ class CourtController extends Controller
             ]);
 
         } catch (Exception $e) {
-            $statusCode = ($e->getCode() >= 400 && $e->getCode() <= 599)
-                ? $e->getCode() : 500;
+            $code = (int) $e->getCode();
+            $statusCode = ($code >= 400 && $code <= 599) ? $code : 500;
 
             return response()->json([
                 'success' => false,

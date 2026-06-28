@@ -6,6 +6,7 @@ use App\Contracts\BookingRepositoryInterface;
 use App\Services\SlotLockService;
 use Illuminate\Support\Facades\DB;
 use Exception;
+use App\Events\BookingCreatedEvent;
 
 class BookingService
 {
@@ -75,8 +76,21 @@ class BookingService
             throw new Exception('Không thể tạo booking. Vui lòng thử lại.', 500);
         }
 
+        $bookingWithRelations = $this->bookingRepository->findById($booking->id);
+
+        // Lấy owner_id của sân để gửi thông báo
+        $firstDetail = $bookingWithRelations->details->first();
+        $ownerId = null;
+        if ($firstDetail && $firstDetail->field && $firstDetail->field->court) {
+            $ownerId = $firstDetail->field->court->owner_id;
+        }
+
+        if ($ownerId) {
+            event(new BookingCreatedEvent($ownerId, $bookingWithRelations->id, $userId));
+        }
+
         return [
-            'booking'            => $this->bookingRepository->findById($booking->id),
+            'booking'            => $bookingWithRelations,
             'expires_in_seconds' => 600,
         ];
     }
@@ -101,6 +115,17 @@ class BookingService
         // Release Redis — slot đã paid, DB là nguồn sự thật từ đây
         $slots = $this->extractSlots($booking->details);
         $this->slotLockService->releaseMultipleLocks($booking->user_id, $slots);
+
+        // Lấy owner_id của sân để gửi thông báo
+        $firstDetail = $booking->details->first();
+        $ownerId = null;
+        if ($firstDetail && $firstDetail->field && $firstDetail->field->court) {
+            $ownerId = $firstDetail->field->court->owner_id;
+        }
+
+        if ($ownerId) {
+            event(new BookingCreatedEvent($ownerId, $bookingId, $booking->user_id));
+        }
 
         return $this->bookingRepository->findById($bookingId);
     }

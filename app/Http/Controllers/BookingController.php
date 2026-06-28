@@ -56,7 +56,8 @@ class BookingController extends Controller
             ]);
 
         } catch (Exception $e) {
-            $code = ($e->getCode() >= 400 && $e->getCode() <= 599) ? $e->getCode() : 500;
+            $code = (int) $e->getCode();
+            $code = ($code >= 400 && $code <= 599) ? $code : 500;
             return response()->json(['success' => false, 'message' => $e->getMessage()], $code);
         }
     }
@@ -94,7 +95,8 @@ class BookingController extends Controller
             ], 201);
 
         } catch (Exception $e) {
-            $code = ($e->getCode() >= 400 && $e->getCode() <= 599) ? $e->getCode() : 500;
+            $code = (int) $e->getCode();
+            $code = ($code >= 400 && $code <= 599) ? $code : 500;
             return response()->json(['success' => false, 'message' => $e->getMessage()], $code);
         }
     }
@@ -114,7 +116,8 @@ class BookingController extends Controller
             ]);
 
         } catch (Exception $e) {
-            $code = ($e->getCode() >= 400 && $e->getCode() <= 599) ? $e->getCode() : 500;
+            $code = (int) $e->getCode();
+            $code = ($code >= 400 && $code <= 599) ? $code : 500;
             return response()->json(['success' => false, 'message' => $e->getMessage()], $code);
         }
     }
@@ -261,7 +264,8 @@ class BookingController extends Controller
             ], 201);
 
         } catch (Exception $e) {
-            $code = ($e->getCode() >= 400 && $e->getCode() <= 599) ? $e->getCode() : 500;
+            $code = (int) $e->getCode();
+            $code = ($code >= 400 && $code <= 599) ? $code : 500;
             return response()->json(['success' => false, 'message' => $e->getMessage()], $code);
         }
     }
