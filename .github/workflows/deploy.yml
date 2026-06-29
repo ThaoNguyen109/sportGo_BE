@@ -24,7 +24,7 @@ jobs:
       run: cp .env.example .env
 
     - name: Cài đặt các thư viện Composer
-      run: composer install --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+      run: composer install --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist --ignore-platform-reqs
 
     - name: Khởi tạo Key mã hóa của Laravel
       run: php artisan key:generate
