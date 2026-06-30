@@ -85,6 +85,7 @@ class CourtRepository implements CourtRepositoryInterface
         return $this->model
             ->with(['owner:id,name,email', 'fields:id,court_id,name'])
             ->where('status', '!=', 'rejected')
+            ->where('is_active', 1)
             ->get();
     }
 
@@ -115,6 +116,7 @@ class CourtRepository implements CourtRepositoryInterface
         $query = $this->model
             ->with(['owner:id,name,email', 'fields:id,court_id,name', 'images:id,court_id,image_url'])
             ->where('status', '!=', 'rejected')
+            ->where('is_active', 1)
             ->selectRaw("courts.*, {$haversine} AS distance_km", [$lat, $lng, $lat]);
 
         if ($maxKm !== null) {
