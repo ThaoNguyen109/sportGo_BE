@@ -131,7 +131,10 @@ class BookingService
     }
 
     /**
-     * BƯỚC 3 — Hủy booking (user hủy hoặc hết giờ thanh toán).
+     * BƯỚC 3 — Hủy booking pending (user bấm hủy trước khi thanh toán).
+     * Booking pending bị XÓA CỨNG khỏi DB, không lưu lại dữ liệu rác.
+     * Chỉ áp dụng cho booking status = 'pending'.
+     * Booking đã 'paid' phải dùng createRefundRequest() để yêu cầu hoàn tiền.
      */
     public function cancelBooking(int $bookingId, int $userId): bool
     {
@@ -143,17 +146,40 @@ class BookingService
         if ($booking->user_id !== $userId) {
             throw new Exception('Bạn không có quyền hủy booking này.', 403);
         }
-        if ($booking->status === 'paid') {
-            throw new Exception('Booking đã thanh toán, không thể hủy.', 422);
+        if ($booking->status !== 'pending') {
+            throw new Exception('Chỉ được hủy booking đang chờ thanh toán. Nếu đã thanh toán, vui lòng gửi yêu cầu hoàn tiền.', 422);
         }
 
-        $this->bookingRepository->updateStatus($bookingId, 'cancelled');
-
-        // Release Redis lock
+        // Release Redis lock trước khi xóa
         $slots = $this->extractSlots($booking->details);
         $this->slotLockService->releaseMultipleLocks($userId, $slots);
 
+        // Xóa cứng booking (cascade xóa luôn booking_details)
+        \App\Models\Booking::where('id', $bookingId)->delete();
+
         return true;
+    }
+
+    /**
+     * Xác nhận đơn đặt hàng là chính thức (nhưng chưa thanh toán).
+     * Sẽ cập nhật trường is_confirmed = true để tránh bị xoá tự động sau 10 phút.
+     */
+    public function confirmBookingPending(int $bookingId, int $userId): bool
+    {
+        $booking = $this->bookingRepository->findById($bookingId);
+
+        if (!$booking) {
+            throw new Exception('Booking không tồn tại.', 404);
+        }
+        if ($booking->user_id !== $userId) {
+            throw new Exception('Bạn không có quyền xác nhận booking này.', 403);
+        }
+        if ($booking->status !== 'pending') {
+            throw new Exception('Chỉ có thể xác nhận booking ở trạng thái chờ thanh toán.', 422);
+        }
+
+        // Cập nhật is_confirmed = true
+        return \App\Models\Booking::where('id', $bookingId)->update(['is_confirmed' => true]) > 0;
     }
 
     /**
@@ -193,20 +219,16 @@ class BookingService
 
     /**
      * Format tóm tắt booking cho danh sách lịch sử.
+     * Trạng thái DB phản ánh đúng nghiệp vụ, không cần override động:
+     *   pending   → Chờ thanh toán
+     *   paid      → Đã thanh toán
+     *   cancelled → Đã gửi yêu cầu hoàn tiền (đang chờ admin duyệt)
+     *   refunded  → Admin đã hoàn tiền thành công
      */
     private function formatBookingSummary(object $booking): array
     {
         $firstDetail = $booking->details->first();
-        
-        // Xác định trạng thái hoàn tiền động
-        $status = $booking->status;
-        if ($booking->refundRequest) {
-            if ($booking->refundRequest->status === 'completed') {
-                $status = 'refunded';
-            } elseif ($booking->refundRequest->status === 'pending') {
-                $status = 'refunding'; // Đang chờ duyệt hoàn tiền
-            }
-        }
+        $status = $booking->status; // Lấy thẳng từ DB, không cần override
 
         return [
             'id'             => $booking->id,
@@ -238,14 +260,7 @@ class BookingService
      */
     private function formatBookingDetail(object $booking): array
     {
-        $status = $booking->status;
-        if ($booking->refundRequest) {
-            if ($booking->refundRequest->status === 'completed') {
-                $status = 'refunded';
-            } elseif ($booking->refundRequest->status === 'pending') {
-                $status = 'refunding';
-            }
-        }
+        $status = $booking->status; // Lấy thẳng từ DB
 
         return [
             'id'             => $booking->id,
@@ -280,24 +295,27 @@ class BookingService
     }
 
     /**
-     * Tự động quét và hủy các đơn hàng ở trạng thái PENDING quá 10 phút.
-     * Giải phóng Redis lock (nếu còn) và cập nhật DB status = 'cancelled'.
+     * Tự động quét và XÓA CỨNG các booking PENDING quá 10 phút chưa thanh toán.
+     * Giải phóng Redis lock, sau đó xóa cứng để DB luôn sạch sẽ.
+     * Không lưu lại dữ liệu rác — booking pending hết hạn không có giá trị.
      */
     public function releaseExpiredBookings(): void
     {
         $expiredTime = \Carbon\Carbon::now()->subSeconds(600); // 10 phút trước
 
         $expiredBookings = \App\Models\Booking::where('status', 'pending')
+            ->where('is_confirmed', false)
             ->where('created_at', '<', $expiredTime)
             ->with('details')
             ->get();
 
         foreach ($expiredBookings as $booking) {
-            $booking->update(['status' => 'cancelled']);
-
-            // Giải phóng Redis locks
+            // Giải phóng Redis locks trước
             $slots = $this->extractSlots($booking->details);
             $this->slotLockService->releaseMultipleLocks($booking->user_id, $slots);
+
+            // Xóa cứng khỏi DB (cascade xóa booking_details)
+            $booking->delete();
         }
     }
 
@@ -345,7 +363,13 @@ class BookingService
 
             // Ưu tiên check DB trước (booked là trạng thái cuối cùng, không đổi)
             if (isset($bookedMap[$slotKey])) {
-                $status            = $bookedMap[$slotKey] === 'paid' ? 'booked' : 'locked';
+                $info = $bookedMap[$slotKey];
+                // Nếu đã thanh toán (paid) HOẶC là pending đã được xác nhận (is_confirmed == true) -> BOOKED (đỏ)
+                if ($info['status'] === 'paid' || ($info['status'] === 'pending' && $info['is_confirmed'])) {
+                    $status = 'booked';
+                } else {
+                    $status = 'locked';
+                }
                 $expiresInSeconds  = null;
             } else {
                 // Check Redis lock
@@ -426,17 +450,22 @@ class BookingService
             throw new \Exception('Đơn đặt sân này đã gửi yêu cầu hoàn tiền trước đó.', 409);
         }
 
-        // Tạo bản ghi hoàn tiền
-        $refundRequest = \App\Models\RefundRequest::create([
-            'booking_id'          => $bookingId,
-            'user_id'             => $userId,
-            'bank_name'           => $data['bank_name'],
-            'bank_account_name'   => $data['bank_account_name'],
-            'bank_account_number' => $data['bank_account_number'],
-            'refund_amount'       => $booking->total_price,
-            'reason'              => $data['reason'] ?? null,
-            'status'              => 'pending',
-        ]);
+        // Tạo bản ghi hoàn tiền + cập nhật booking status = 'cancelled'
+        // (cancelled = đang chờ admin duyệt hoàn tiền)
+        DB::transaction(function () use ($bookingId, $userId, $data, $booking, &$refundRequest) {
+            $this->bookingRepository->updateStatus($bookingId, 'cancelled');
+
+            $refundRequest = \App\Models\RefundRequest::create([
+                'booking_id'          => $bookingId,
+                'user_id'             => $userId,
+                'bank_name'           => $data['bank_name'],
+                'bank_account_name'   => $data['bank_account_name'],
+                'bank_account_number' => $data['bank_account_number'],
+                'refund_amount'       => $booking->total_price,
+                'reason'              => $data['reason'] ?? null,
+                'status'              => 'pending',
+            ]);
+        });
 
         return $refundRequest;
     }

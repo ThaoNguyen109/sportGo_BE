@@ -123,6 +123,27 @@ class BookingController extends Controller
     }
 
     /**
+     * POST /api/bookings/{id}/confirm
+     * User xác nhận đặt đơn -> Lưu thành pending vĩnh viễn (không bị xóa sau 10 phút)
+     */
+    public function confirmBooking(int $id): JsonResponse
+    {
+        try {
+            $this->bookingService->confirmBookingPending($id, auth()->id());
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Xác nhận đặt đơn thành công.',
+            ]);
+
+        } catch (Exception $e) {
+            $code = (int) $e->getCode();
+            $code = ($code >= 400 && $code <= 599) ? $code : 500;
+            return response()->json(['success' => false, 'message' => $e->getMessage()], $code);
+        }
+    }
+
+    /**
      * GET /api/slots/status
      *
      * Check trạng thái của một hoặc nhiều slot cùng lúc.
@@ -168,11 +189,17 @@ class BookingController extends Controller
             ]];
         }
 
-        // Lấy tất cả booking_details đã paid để check trong 1 query duy nhất
+        // Lấy tất cả booking_details đã paid HOẶC pending đã xác nhận để check trong 1 query duy nhất
         // Dùng TIME_FORMAT để cắt sẵn về HH:MM, tránh mismatch với request string (09:00 vs 09:00:00)
         $bookedSlots = \App\Models\BookingDetail::query()
             ->join('bookings', 'bookings.id', '=', 'booking_details.booking_id')
-            ->where('bookings.status', 'paid')
+            ->where(function ($query) {
+                $query->where('bookings.status', 'paid')
+                      ->orWhere(function ($q) {
+                          $q->where('bookings.status', 'pending')
+                            ->where('bookings.is_confirmed', true);
+                      });
+            })
             ->selectRaw(
                 'booking_details.field_id,
                  DATE_FORMAT(booking_details.booking_date, \'%Y-%m-%d\') as booking_date,

@@ -68,15 +68,17 @@ class BookingRepository implements BookingRepositoryInterface
             ->where('booking_details.field_id', $fieldId)
             ->where('booking_details.booking_date', $date)
             ->whereIn('bookings.status', ['paid', 'pending'])
-            ->select('booking_details.start_time', 'booking_details.end_time', 'bookings.status')
+            ->select('booking_details.start_time', 'booking_details.end_time', 'bookings.status', 'bookings.is_confirmed')
             ->get();
 
-        // Tạo map để lookup O(1) thay vì O(n)
-        // Key: "08:00-10:00"
+        // Tạo map để lookup O(1)
         $map = [];
         foreach ($rows as $row) {
             $key       = substr($row->start_time, 0, 5) . '-' . substr($row->end_time, 0, 5);
-            $map[$key] = $row->status; // 'paid' or 'pending'
+            $map[$key] = [
+                'status'       => $row->status,
+                'is_confirmed' => (bool) $row->is_confirmed,
+            ];
         }
 
         return $map;

@@ -144,6 +144,7 @@ Route::middleware('auth:api')->group(function () {
     Route::get('/bookings/{id}',     [BookingController::class, 'show']);
     Route::post('/bookings/reserve', [BookingController::class, 'reserve']);
     Route::delete('/bookings/{id}',  [BookingController::class, 'cancel']);
+    Route::post('/bookings/{id}/confirm', [BookingController::class, 'confirmBooking']);
     Route::post('/bookings/{id}/refund', [BookingController::class, 'requestRefund']);
 });
 
