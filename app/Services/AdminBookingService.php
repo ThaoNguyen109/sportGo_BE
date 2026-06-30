@@ -199,7 +199,7 @@ public function refundBooking(
 
             throw new HttpException(
                 422,
-                'Chỉ booking đã hủy mới được hoàn tiền'
+                'Chỉ booking ở trạng thái "cancelled" (đã yêu cầu hoàn tiền) mới được xử lý hoàn tiền.'
             );
         }
 

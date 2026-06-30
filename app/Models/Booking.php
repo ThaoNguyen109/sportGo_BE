@@ -19,6 +19,11 @@ class Booking extends Model
         'status',
         'cancel_reason',
         'cancelled_by',
+        'is_confirmed',
+    ];
+
+    protected $casts = [
+        'is_confirmed' => 'boolean',
     ];
 
     /**

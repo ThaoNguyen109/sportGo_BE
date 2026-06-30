@@ -184,6 +184,8 @@ class PaymentService
                 'paid',
                 $this->gateway->process()
             );
+
+            \App\Models\Booking::where('id', $payment->booking_id)->update(['is_confirmed' => true]);
         });
 
         // Release Redis lock — slot giờ được bảo vệ bởi DB
@@ -197,26 +199,25 @@ class PaymentService
     }
 
     /**
-     * Xử lý khi thanh toán thất bại / bị hủy.
+     * Xử lý khi thanh toán thất bại / bị hủy bởi user.
+     * Booking bị XÓA CỨNG — không lưu lại dữ liệu rác trong DB.
+     * Bản ghi payment vẫn được giữ lại (status = 'failed') để audit trail.
      */
     private function handlePaymentFailed(object $payment, array $data): void
     {
-        DB::transaction(function () use ($payment, $data) {
-            $this->paymentRepository->updateByOrderId($payment->order_id, [
-                'status'       => 'failed',
-                'raw_response' => $data,
-            ]);
+        // Chỉ cập nhật payment record (audit trail), KHÔNG cập nhật booking
+        $this->paymentRepository->updateByOrderId($payment->order_id, [
+            'status'       => 'failed',
+            'raw_response' => $data,
+        ]);
 
-            $this->bookingRepository->updateStatus(
-                $payment->booking_id,
-                'cancelled'
-            );
-        });
-
-        // Release Redis lock — slot mở lại cho người khác
+        // Release Redis lock trước khi xóa booking
         $this->releaseSlotLocks($payment);
 
-        Log::info('Payment IPN: Thanh toán thất bại', [
+        // Xóa cứng booking và booking_details (cascade)
+        \App\Models\Booking::where('id', $payment->booking_id)->delete();
+
+        Log::info('Payment IPN: Thanh toán thất bại — booking đã xóa', [
             'booking_id'  => $payment->booking_id,
             'result_code' => $data['resultCode'],
             'message'     => $data['message'],
