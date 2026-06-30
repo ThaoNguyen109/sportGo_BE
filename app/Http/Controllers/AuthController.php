@@ -22,7 +22,7 @@ class AuthController extends Controller
             'email' => 'required|email|unique:users,email',
             'phone' => 'nullable|string|max:20|unique:users,phone',
             'password' => 'required|string|min:6|confirmed',
-            'role' => 'nullable|in:user,owner',
+            'role' => 'nullable|in:user,owner,admin',
         ]);
 
         if ($validator->fails()) {
